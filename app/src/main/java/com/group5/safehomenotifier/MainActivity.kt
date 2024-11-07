@@ -32,17 +32,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import com.google.firebase.functions.FirebaseFunctions
 import androidx.compose.ui.graphics.Color
 import android.content.Context
-import androidx.compose.material.icons.filled.ArrowBack
+import android.widget.Toast
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.ui.text.style.TextAlign
+import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
+    private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
     private val historyImages = mutableStateListOf<String>()
+
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+
         val sharedPreferences = getSharedPreferences("SafeHomePrefs", Context.MODE_PRIVATE)
         val hasStarted = sharedPreferences.getBoolean("hasStarted", false)
         sharedPreferences.getBoolean("isRegistered", false)
@@ -59,11 +65,18 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
 
         setContent {
+            if (auth.currentUser != null) {
             SafeHomeNotifierApp(
                 historyImages = historyImages, hasStarted = hasStarted,
                 imageUrl = imageUrl
             )
-        }
+        } else{
+                SignInScreen(onSignInSuccess = {
+                    // Navigate to main screen upon successful sign-in
+                    recreate()
+                })
+
+            }        }
     }
 
     private fun setStarted() {
@@ -73,6 +86,8 @@ class MainActivity : ComponentActivity() {
             apply()
         }
     }
+
+
 
     private fun setRegistrationStatus(isRegistered: Boolean) {
         val sharedPreferences = getSharedPreferences("SafeHomePrefs", Context.MODE_PRIVATE)
@@ -104,6 +119,109 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    @Composable
+    fun SignInScreen(onSignInSuccess: () -> Unit) {
+        var email by remember { mutableStateOf("") }
+        var password by remember { mutableStateOf("") }
+        val auth = FirebaseAuth.getInstance()
+        val db = FirebaseFirestore.getInstance()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            TextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                //visualTransformation = PasswordVisualTransformation()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = {
+                    auth.signInWithEmailAndPassword(email, password)
+                        .addOnCompleteListener { task ->
+                            if (task.isSuccessful) {
+                                // After successful sign-in, save the user info in Firestore (optional)
+                                val user = auth.currentUser
+                                val userEmail = user?.email
+                                if (userEmail != null) {
+                                    saveUserToFirestore(userEmail)
+                                }
+                                Toast.makeText(
+                                    auth.app.applicationContext,
+                                    "Sign-in successful",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                onSignInSuccess() // Proceed to main screen
+                            } else {
+                                Toast.makeText(
+                                    auth.app.applicationContext,
+                                    "Sign-in failed: ${task.exception?.message}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                }
+            ) {
+                Text("Sign In")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = {
+                    auth.createUserWithEmailAndPassword(email, password)
+                        .addOnCompleteListener { task ->
+                            if (task.isSuccessful) {
+                                Toast.makeText(
+                                    auth.app.applicationContext,
+                                    "Sign-up successful",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                onSignInSuccess() // Proceed to main screen
+                            } else {
+                                Toast.makeText(
+                                    auth.app.applicationContext,
+                                    "Sign-up failed: ${task.exception?.message}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                }
+            ) {
+                Text("Register")
+            }
+        }
+    }
+
+    fun saveUserToFirestore(email: String) {
+        val db = FirebaseFirestore.getInstance()
+        val userRef = db.collection("users").document(email)
+
+        val userData = hashMapOf(
+            "email" to email,
+            "devices" to mutableListOf<String>() // List to store registered device IDs
+        )
+
+        userRef.set(userData)
+            .addOnSuccessListener {
+                Log.d("Firestore", "User data saved successfully")
+            }
+            .addOnFailureListener { e ->
+                Log.w("Firestore", "Error saving user data", e)
+            }
+    }
+
 
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @ExperimentalMaterial3Api
@@ -217,119 +335,119 @@ class MainActivity : ComponentActivity() {
         onRenameDevice: () -> Unit,
     ) {
         var expanded by remember { mutableStateOf(false) }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.SpaceBetween // This will space content evenly
+            ) {
+                // Main content
+                if (isRegisteredSuccessfully) {
+                    // Centering the welcome message
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f), // Use weight to allow this box to take up remaining space
+                        contentAlignment = Alignment.Center // Center the content vertically
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally // Center horizontally within the Column
+                        ) {
+                            Text(
+                                text = "Welcome to ESP32Eye",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                textAlign = TextAlign.Center // Center the text
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Your safety, our priority.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.secondary,
+                                textAlign = TextAlign.Center // Center the text
+                            )
+                        }
+                    }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween // This will space content evenly
-        ) {
-            // Main content
-            if (isRegisteredSuccessfully) {
-                // Centering the welcome message
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f), // Use weight to allow this box to take up remaining space
-                    contentAlignment = Alignment.Center // Center the content vertically
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally // Center horizontally within the Column
+                    // Bottom Row with Home, Notification, and Menu icons
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceEvenly // Space evenly between icons
+                    ) {
+                        // Notification Icon
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "Add Icon",
+                            modifier = Modifier
+                                .size(45.dp)
+                                .clickable {
+                                    onAddDevice()
+                                },
+                            tint = Color.Black
+                        )
+
+                        Icon(
+                            imageVector = Icons.Filled.Notifications,
+                            contentDescription = "Notification Icon",
+                            modifier = Modifier
+                                .size(45.dp)
+                                .clickable {
+                                    onDisplay()
+                                },
+                            tint = Color.Black
+                        )
+
+                        // Menu Icon for dropdown
+                        IconButton(onClick = { expanded = true }) {
+                            Icon(
+                                Icons.Filled.Menu,
+                                contentDescription = "Menu Icon",
+                                modifier = Modifier.size(45.dp)
+                            )
+                        }
+                    }
+
+                    // Dropdown menu
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            onClick = {
+                                expanded = false
+                                onShowHistory()
+                            },
+                            text = { Text("History") }
+                        )
+
+                        DropdownMenuItem(
+                            onClick = {
+                                expanded = false
+                                onRenameDevice()  // Trigger the function to rename registered device
+                            },
+                            text = { Text("Rename Device") }
+                        )
+                    }
+                } else {
+                    // Optionally, you can display a message indicating that registration is needed
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Welcome to ESP32Eye",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            textAlign = TextAlign.Center // Center the text
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Your safety, our priority.",
+                            text = "Please register your device to access the main features.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.secondary,
-                            textAlign = TextAlign.Center // Center the text
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center
                         )
                     }
-                }
-
-                // Bottom Row with Home, Notification, and Menu icons
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly // Space evenly between icons
-                ) {
-                    // Notification Icon
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = "Add Icon",
-                        modifier = Modifier
-                            .size(45.dp)
-                            .clickable {
-                                onAddDevice()
-                            },
-                        tint = Color.Black
-                    )
-
-                    Icon(
-                        imageVector = Icons.Filled.Notifications,
-                        contentDescription = "Notification Icon",
-                        modifier = Modifier
-                            .size(45.dp)
-                            .clickable {
-                                onDisplay()
-                            },
-                        tint = Color.Black
-                    )
-
-                    // Menu Icon for dropdown
-                    IconButton(onClick = { expanded = true }) {
-                        Icon(
-                            Icons.Filled.Menu,
-                            contentDescription = "Menu Icon",
-                            modifier = Modifier.size(45.dp)
-                        )
-                    }
-                }
-
-                // Dropdown menu
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    DropdownMenuItem(
-                        onClick = {
-                            expanded = false
-                            onShowHistory()
-                        },
-                        text = { Text("History") }
-                    )
-
-                    DropdownMenuItem(
-                        onClick = {
-                            expanded = false
-                            onRenameDevice()  // Trigger the function to rename registered device
-                        },
-                        text = { Text("Rename Device") }
-                    )
-                }
-            } else {
-                // Optionally, you can display a message indicating that registration is needed
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Please register your device to access the main features.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        textAlign = TextAlign.Center
-                    )
                 }
             }
         }
-    }
+
 
     @Composable
     fun HistoryScreen(historyImages: List<String>, deviceName: String?, onBack: () -> Unit) {
@@ -341,7 +459,7 @@ class MainActivity : ComponentActivity() {
             Column(modifier = Modifier.padding(16.dp)) {
                 IconButton(onClick = { onBack() }) {
                     Icon(
-                        imageVector = Icons.Filled.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.Gray // Customize color if needed
                     )
@@ -417,7 +535,7 @@ class MainActivity : ComponentActivity() {
             Column(modifier = Modifier.padding(16.dp)) {
                 IconButton(onClick = { onBack() }) {
                     Icon(
-                        imageVector = Icons.Filled.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.Gray // Customize color if needed
                     )
@@ -483,7 +601,7 @@ class MainActivity : ComponentActivity() {
             Column(modifier = Modifier.padding(16.dp)) {
                 IconButton(onClick = { onBack() }) {
                     Icon(
-                        imageVector = Icons.Filled.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.Gray // Customize color if needed
                     )
@@ -609,7 +727,7 @@ fun DisplayNotificationImage(imageUrl: String?, deviceName: String?, onBack: () 
     ) {
         IconButton(onClick = { onBack() }) {
             Icon(
-                imageVector = Icons.Filled.ArrowBack,
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
                 tint = Color.Gray // Customize color if needed
             )
