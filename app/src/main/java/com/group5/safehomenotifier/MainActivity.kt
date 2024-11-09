@@ -2,6 +2,8 @@ package com.group5.safehomenotifier
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.DownloadManager
+import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -32,11 +34,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import com.google.firebase.functions.FirebaseFunctions
 import androidx.compose.ui.graphics.Color
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.OutputStream
+import java.net.URL
 
 class MainActivity : ComponentActivity() {
     private val auth = FirebaseAuth.getInstance()
@@ -49,7 +63,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
 
-        val sharedPreferences = getSharedPreferences("SafeHomePrefs", Context.MODE_PRIVATE)
+        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
         val hasStarted = sharedPreferences.getBoolean("hasStarted", false)
         sharedPreferences.getBoolean("isRegistered", false)
 
@@ -80,7 +94,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setStarted() {
-        val sharedPreferences = getSharedPreferences("SafeHomePrefs", Context.MODE_PRIVATE)
+        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
         with(sharedPreferences.edit()) {
             putBoolean("hasStarted", true)
             apply()
@@ -90,7 +104,7 @@ class MainActivity : ComponentActivity() {
 
 
     private fun setRegistrationStatus(isRegistered: Boolean) {
-        val sharedPreferences = getSharedPreferences("SafeHomePrefs", Context.MODE_PRIVATE)
+        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
         with(sharedPreferences.edit()) {
             putBoolean("isRegistered", isRegistered)
             apply()
@@ -98,7 +112,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isDeviceRegistered(): Boolean {
-        val sharedPreferences = getSharedPreferences("SafeHomePrefs", Context.MODE_PRIVATE)
+        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
         return sharedPreferences.getBoolean("isRegistered", false)
     }
 
@@ -238,103 +252,113 @@ class MainActivity : ComponentActivity() {
         var showHistory by remember { mutableStateOf(false) }
         var imageDisplay by remember { mutableStateOf(false) }
         var renameDevice by remember { mutableStateOf(false) }
+        var loggedOut by remember { mutableStateOf(false) }
         val deviceName = intent.getStringExtra("deviceName")
 
 
-
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Esp32Eye", color = Color.White) },
-                    actions = {
-                        if (isStarted && !isRegisteredSuccessfully) {
-                            IconButton(onClick = { isRegistering = true }) {
-                                Icon(Icons.Filled.Add, contentDescription = "Add Device")
+        if (loggedOut) {
+            // When logged out, navigate to SignInScreen
+            SignInScreen(onSignInSuccess = {
+                loggedOut = false // Reset logout state
+            })
+        } else {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text("Esp32Eye", color = Color.White) },
+                        actions = {
+                            if (isStarted && !isRegisteredSuccessfully) {
+                                IconButton(onClick = { isRegistering = true }) {
+                                    Icon(Icons.Filled.Add, contentDescription = "Add Device")
+                                }
                             }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF7B7D7E)) // Purple background
+                    )
+                },
+                content = { _ ->
+                    when {
+                        isRegistering -> {
+                            RegisterEsp32Screen(
+                                onBack = { isRegistering = false }
+                            )
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF7B7D7E)) // Purple background
-                )
-            },
-            content = { _ ->
-                when {
-                    isRegistering -> {
-                        RegisterEsp32Screen(
-                            onBack = { isRegistering = false }
-                        )
-                    }
 
 
+                        showHistory -> {
+                            HistoryScreen(
+                                historyImages,
+                                deviceName = deviceName,
+                                onBack = { showHistory = false }
+                            )
+                            // Go back to main when back is clicked
+                        }
 
+                        imageDisplay -> {
+                            DisplayNotificationImage(
+                                imageUrl = imageUrl,
+                                deviceName = deviceName,
+                                onBack = { imageDisplay = false },
+                                context = LocalContext.current
+                            )
+                            // Go back to main when back is clicked
+                        }
 
+                        renameDevice -> {
+                            RenameEsp32Screen(
+                                onBack = { renameDevice = false }
+                            )
+                        }
 
+                        loggedOut -> {
+                            LogOutUser(
+                                onLoggedOut = { loggedOut = false })
+                        }
 
-                    showHistory -> {
-                        HistoryScreen(
-                            historyImages,
-                            deviceName = deviceName,
-                            onBack = { showHistory = false }
-                        )
-                        // Go back to main when back is clicked
-                    }
+                        isRegisteredSuccessfully -> {
+                            // Navigate to MainScreen once registered successfully
+                            MainScreen(
+                                onAddDevice = {
+                                    isRegistering = true
+                                },
+                                onShowHistory = { showHistory = true },
+                                onDisplay = { imageDisplay = true },
+                                onRenameDevice = { renameDevice = true },
+                                onLoggedOut = { loggedOut = true },
 
-                    imageDisplay -> {
-                        DisplayNotificationImage(
-                            imageUrl = imageUrl,
-                            deviceName = deviceName,
-                            onBack = { imageDisplay = false }
-                        )
-                        // Go back to main when back is clicked
-                    }
+                                )
+                        }
 
-                    renameDevice -> {
-                        RenameEsp32Screen(
-                            onBack = { renameDevice = false }
-                        )
-                    }
+                        else -> {
+                            MainScreen(
+                                onAddDevice = {
+                                    isRegistering = true
+                                },
+                                onShowHistory = { showHistory = true },
+                                onDisplay = { imageDisplay = false },
+                                onRenameDevice = { renameDevice = true },
+                                onLoggedOut = { loggedOut = true },
 
-
-                    isRegisteredSuccessfully -> {
-                        // Navigate to MainScreen once registered successfully
-                        MainScreen(
-                            isRegisteredSuccessfully,
-                            onAddDevice = {
-                                isRegistering = true
-                            },
-                            onShowHistory = { showHistory = true },
-                            onDisplay = { imageDisplay = true },
-                            onRenameDevice = {renameDevice = true}
-
-                        )
-                    }
-
-                    else -> {
-                        MainScreen(
-                            isRegisteredSuccessfully,
-                            onAddDevice = {
-                                isRegistering = true
-                            },
-                            onShowHistory = { showHistory = true },
-                            onDisplay = { imageDisplay = false },
-                            onRenameDevice = {renameDevice = true}
-
-                        )
+                            )
+                        }
                     }
                 }
-            }
-        )
+            )
+        }
     }
 
     @SuppressLint("NewApi")
     @Composable
     fun MainScreen(
-        isRegisteredSuccessfully: Boolean,
         onAddDevice: () -> Unit,
         onShowHistory: () -> Unit,
         onDisplay: () -> Unit,
         onRenameDevice: () -> Unit,
+        onLoggedOut: () -> Unit,
     ) {
         var expanded by remember { mutableStateOf(false) }
+
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -342,8 +366,6 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.SpaceBetween // This will space content evenly
             ) {
                 // Main content
-                if (isRegisteredSuccessfully) {
-                    // Centering the welcome message
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -415,6 +437,7 @@ class MainActivity : ComponentActivity() {
                         expanded = expanded,
                         onDismissRequest = { expanded = false }
                     ) {
+
                         DropdownMenuItem(
                             onClick = {
                                 expanded = false
@@ -430,23 +453,25 @@ class MainActivity : ComponentActivity() {
                             },
                             text = { Text("Rename Device") }
                         )
-                    }
-                } else {
-                    // Optionally, you can display a message indicating that registration is needed
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Please register your device to access the main features.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            textAlign = TextAlign.Center
+
+                        DropdownMenuItem(
+                            onClick = {
+                                expanded = false
+                               onLoggedOut()
+                            },
+                            text = { Text("Log Out") }
                         )
+
                     }
-                }
             }
         }
+
+    @Composable
+    private fun LogOutUser(onLoggedOut: () -> Unit) {
+            FirebaseAuth.getInstance().signOut()
+        onLoggedOut ()
+    }
+
 
 
     @Composable
@@ -717,7 +742,7 @@ class MainActivity : ComponentActivity() {
 }
 //Image Item received by application
 @Composable
-fun DisplayNotificationImage(imageUrl: String?, deviceName: String?, onBack: () -> Unit) {
+fun DisplayNotificationImage(imageUrl: String?, deviceName: String?, onBack: () -> Unit, context: Context) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -755,13 +780,81 @@ fun DisplayNotificationImage(imageUrl: String?, deviceName: String?, onBack: () 
                     .height(300.dp),
                 contentScale = ContentScale.Crop
             )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(onClick = {
+                CoroutineScope(Dispatchers.IO).launch {
+                    downloadImageUsingMediaStore(context, imageUrl)
+                }
+            }){
+                Text("Download")
+            }
         } else {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = "Image not available")
+                Column(modifier = Modifier.padding(16.dp)) {
+                    IconButton(onClick = { onBack() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.Gray // Customize color if needed
+                        )
+                    }
+                    Text(text = "Image not available")
+                }
             }
         }
     }
 }
+
+suspend fun downloadImageUsingMediaStore(context: Context, imageUrl: String) {
+    withContext(Dispatchers.IO) {
+        try {
+            // Download the image as a Bitmap
+            val bitmap = BitmapFactory.decodeStream(URL(imageUrl).openStream())
+
+            // Prepare the content values
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "downloaded_image.jpg")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/SafeHomeNotifier")
+            }
+
+            // Insert the image into MediaStore
+            val resolver = context.contentResolver
+            val imageUri: Uri? = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+            if (imageUri != null) {
+                resolver.openOutputStream(imageUri)?.use { outputStream: OutputStream ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                }
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Image downloaded successfully", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Failed to download image: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+}
+/*
+@Composable
+private fun DownloadImageUrl(imageUrl: String, onDownloadImage: () -> Unit) {
+    val context = LocalContext.current
+    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    val request = DownloadManager.Request(Uri.parse(imageUrl))
+        .setTitle("Downloading Image")
+        .setDescription("Image is being downloaded...")
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "downloaded_image.jpg")
+        .setAllowedOverMetered(true)
+        .setAllowedOverRoaming(true)
+
+    downloadManager.enqueue(request)
+}
+*/
