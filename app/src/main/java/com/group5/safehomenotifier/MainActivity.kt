@@ -40,8 +40,13 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color.Companion.Black
+import androidx.compose.ui.graphics.Color.Companion.White
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import com.google.firebase.auth.FirebaseAuth
@@ -51,6 +56,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStream
 import java.net.URL
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import com.google.android.play.core.integrity.x
+import com.group5.safehomenotifier.ui.theme.CharcoalBlue
+import com.group5.safehomenotifier.ui.theme.poppinsFontFamily
+
 
 class MainActivity : ComponentActivity() {
     private val auth = FirebaseAuth.getInstance()
@@ -64,7 +75,7 @@ class MainActivity : ComponentActivity() {
 
 
         val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
-        val hasStarted = sharedPreferences.getBoolean("hasStarted", false)
+        sharedPreferences.getBoolean("hasStarted", false)
         sharedPreferences.getBoolean("isRegistered", false)
 
 
@@ -81,7 +92,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             if (auth.currentUser != null) {
             SafeHomeNotifierApp(
-                historyImages = historyImages, hasStarted = hasStarted,
+                historyImages = historyImages,
                 imageUrl = imageUrl
             )
         } else{
@@ -139,24 +150,25 @@ class MainActivity : ComponentActivity() {
         var email by remember { mutableStateOf("") }
         var password by remember { mutableStateOf("") }
         val auth = FirebaseAuth.getInstance()
-        val db = FirebaseFirestore.getInstance()
+        FirebaseFirestore.getInstance()
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(CharcoalBlue)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             TextField(
                 value = email,
                 onValueChange = { email = it },
-                label = { Text("Email") }
+                label = { Text("Email", fontFamily = poppinsFontFamily) }
             )
             Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("Password") },
+                label = { Text("Password", fontFamily = poppinsFontFamily) },
                 //visualTransformation = PasswordVisualTransformation()
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -186,9 +198,12 @@ class MainActivity : ComponentActivity() {
                                 ).show()
                             }
                         }
-                }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.LightGray
+                )
             ) {
-                Text("Sign In")
+                Text("Sign In", fontFamily = poppinsFontFamily, color = Black)
             }
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -213,7 +228,7 @@ class MainActivity : ComponentActivity() {
                         }
                 }
             ) {
-                Text("Register")
+                Text("Register", fontFamily = poppinsFontFamily)
             }
         }
     }
@@ -239,14 +254,11 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @ExperimentalMaterial3Api
-    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun SafeHomeNotifierApp(
         historyImages: MutableList<String>,
-        hasStarted: Boolean,
         imageUrl: String?
     ) {
-        val isStarted by rememberSaveable { mutableStateOf(hasStarted) }
         var isRegistering by rememberSaveable { mutableStateOf(false) }
         val isRegisteredSuccessfully by rememberSaveable { mutableStateOf(isDeviceRegistered()) }
         var showHistory by remember { mutableStateOf(false) }
@@ -263,19 +275,19 @@ class MainActivity : ComponentActivity() {
             })
         } else {
             Scaffold(
+                /*
                 topBar = {
                     TopAppBar(
-                        title = { Text("Esp32Eye", color = Color.White) },
+                        title = { Text("Esp32Eye", color = Color.White, fontFamily = poppinsFontFamily, fontWeight = FontWeight.Normal) },
                         actions = {
                             if (isStarted && !isRegisteredSuccessfully) {
                                 IconButton(onClick = { isRegistering = true }) {
                                     Icon(Icons.Filled.Add, contentDescription = "Add Device")
                                 }
                             }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF7B7D7E)) // Purple background
+                        }// Purple background
                     )
-                },
+                },*/
                 content = { _ ->
                     when {
                         isRegistering -> {
@@ -325,6 +337,9 @@ class MainActivity : ComponentActivity() {
                                 onDisplay = { imageDisplay = true },
                                 onRenameDevice = { renameDevice = true },
                                 onLoggedOut = { loggedOut = true },
+                                imageUrl = imageUrl
+
+
 
                                 )
                         }
@@ -338,6 +353,9 @@ class MainActivity : ComponentActivity() {
                                 onDisplay = { imageDisplay = false },
                                 onRenameDevice = { renameDevice = true },
                                 onLoggedOut = { loggedOut = true },
+                                imageUrl = imageUrl
+
+
 
                             )
                         }
@@ -355,6 +373,7 @@ class MainActivity : ComponentActivity() {
         onDisplay: () -> Unit,
         onRenameDevice: () -> Unit,
         onLoggedOut: () -> Unit,
+        imageUrl: String?,
     ) {
         var expanded by remember { mutableStateOf(false) }
 
@@ -362,6 +381,7 @@ class MainActivity : ComponentActivity() {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(Color(0xFF364559))
                     .padding(16.dp),
                 verticalArrangement = Arrangement.SpaceBetween // This will space content evenly
             ) {
@@ -378,14 +398,18 @@ class MainActivity : ComponentActivity() {
                             Text(
                                 text = "Welcome to ESP32Eye",
                                 style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.primary,
+                                fontFamily = poppinsFontFamily,
+                                fontWeight = FontWeight.Normal,
+                                color = (Color.LightGray),
                                 textAlign = TextAlign.Center // Center the text
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = "Your safety, our priority.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.secondary,
+                                fontFamily = poppinsFontFamily,
+                                fontWeight = FontWeight.Normal,
+                                color = (Color.White),
                                 textAlign = TextAlign.Center // Center the text
                             )
                         }
@@ -400,34 +424,52 @@ class MainActivity : ComponentActivity() {
                         horizontalArrangement = Arrangement.SpaceEvenly // Space evenly between icons
                     ) {
                         // Notification Icon
+                        Box(
+                            contentAlignment = Alignment.TopEnd
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Notifications,
+                                contentDescription = "Notification Icon",
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clickable {
+                                        onDisplay()
+                                    },
+                                tint = Color.White
+                            )
+
+                            if (imageUrl != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                    . offset (x = 12.dp, y = (-4).dp)
+                                .clip(CircleShape)
+                                    .background(Color.Red)
+                                )
+                            }
+                        }
+
+
                         Icon(
                             imageVector = Icons.Filled.Add,
                             contentDescription = "Add Icon",
                             modifier = Modifier
-                                .size(45.dp)
+                                .size(40.dp)
                                 .clickable {
                                     onAddDevice()
                                 },
-                            tint = Color.Black
+                            tint = Color.White
                         )
 
-                        Icon(
-                            imageVector = Icons.Filled.Notifications,
-                            contentDescription = "Notification Icon",
-                            modifier = Modifier
-                                .size(45.dp)
-                                .clickable {
-                                    onDisplay()
-                                },
-                            tint = Color.Black
-                        )
+
 
                         // Menu Icon for dropdown
                         IconButton(onClick = { expanded = true }) {
                             Icon(
                                 Icons.Filled.Menu,
                                 contentDescription = "Menu Icon",
-                                modifier = Modifier.size(45.dp)
+                                tint = Color.White,
+                                modifier = Modifier.size(40.dp)
                             )
                         }
                     }
@@ -443,7 +485,7 @@ class MainActivity : ComponentActivity() {
                                 expanded = false
                                 onShowHistory()
                             },
-                            text = { Text("History") }
+                            text = { Text("History", fontFamily = poppinsFontFamily) }
                         )
 
                         DropdownMenuItem(
@@ -451,7 +493,7 @@ class MainActivity : ComponentActivity() {
                                 expanded = false
                                 onRenameDevice()  // Trigger the function to rename registered device
                             },
-                            text = { Text("Rename Device") }
+                            text = { Text("Rename Device", fontFamily = poppinsFontFamily) }
                         )
 
                         DropdownMenuItem(
@@ -459,7 +501,7 @@ class MainActivity : ComponentActivity() {
                                 expanded = false
                                onLoggedOut()
                             },
-                            text = { Text("Log Out") }
+                            text = { Text("Log Out", fontFamily = poppinsFontFamily) }
                         )
 
                     }
@@ -477,9 +519,6 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun HistoryScreen(historyImages: List<String>, deviceName: String?, onBack: () -> Unit) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Button(onClick = { onBack() }) {
-                Text("Back to Main")
-            }
 
             Column(modifier = Modifier.padding(16.dp)) {
                 IconButton(onClick = { onBack() }) {
@@ -489,7 +528,7 @@ class MainActivity : ComponentActivity() {
                         tint = Color.Gray // Customize color if needed
                     )
                 }
-                Text("History of Images:")
+                Text("History of Images:", fontFamily = poppinsFontFamily, fontWeight = FontWeight.Normal)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 if (deviceName != null) {
@@ -551,37 +590,41 @@ class MainActivity : ComponentActivity() {
         var deviceName by remember { mutableStateOf("") }
         var registrationStatus by remember { mutableStateOf("") }
 
+
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(CharcoalBlue)
                 .padding(16.dp), // Add padding to the Box if desired
             contentAlignment = Alignment.Center // Center the contents
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp)
+            ) {
                 IconButton(onClick = { onBack() }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color.Gray // Customize color if needed
+                        tint = Color.White // Customize color if needed
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = deviceId,
                     onValueChange = { deviceId = it },
-                    label = { Text("Device ID") }
+                    label = { Text("Device ID", fontFamily = poppinsFontFamily) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = token,
                     onValueChange = { token = it },
-                    label = { Text("Input Device Token") }
+                    label = { Text("Input Device Token", fontFamily = poppinsFontFamily) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = deviceName,
                     onValueChange = { deviceName = it },
-                    label = { Text("Device Name") }
+                    label = { Text("Device Name", fontFamily = poppinsFontFamily) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = onClick@{
@@ -595,10 +638,14 @@ class MainActivity : ComponentActivity() {
                             registrationStatus = "Invalid device ID or token."
                         }
                     }
-                })
+                },
+                    colors = ButtonDefaults.buttonColors(
+                       containerColor = Color.LightGray
+                    )
+                )
 
                 {
-                    Text("Register Device")
+                    Text("Register Device", fontFamily = poppinsFontFamily, color = Black)
                 }
                 if (registrationStatus.isNotEmpty()) {
                     Text(
@@ -620,6 +667,7 @@ class MainActivity : ComponentActivity() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(CharcoalBlue)
                 .padding(16.dp), // Add padding to the Box if desired
             contentAlignment = Alignment.Center // Center the contents
         ) {
@@ -628,26 +676,26 @@ class MainActivity : ComponentActivity() {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color.Gray // Customize color if needed
+                        tint = Color.White // Customize color if needed
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = deviceId,
                     onValueChange = { deviceId = it },
-                    label = { Text("Device ID") }
+                    label = { Text("Device ID", fontFamily = poppinsFontFamily) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = token,
                     onValueChange = { token = it },
-                    label = { Text("Input Device Token") }
+                    label = { Text("Input Device Token", fontFamily = poppinsFontFamily) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = deviceName,
                     onValueChange = { deviceName = it },
-                    label = { Text("What name you will be assign?") }
+                    label = { Text("What name you will be assign?", fontFamily = poppinsFontFamily) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = onClick@{
@@ -661,10 +709,14 @@ class MainActivity : ComponentActivity() {
                             registrationStatus = "Invalid device ID or token."
                         }
                     }
-                })
+                },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.LightGray
+                    )
+                )
 
                 {
-                    Text("Rename Device")
+                    Text("Rename Device",  fontFamily = poppinsFontFamily, color = Black)
                 }
                 if (registrationStatus.isNotEmpty()) {
                     Text(
@@ -787,7 +839,7 @@ fun DisplayNotificationImage(imageUrl: String?, deviceName: String?, onBack: () 
                     downloadImageUsingMediaStore(context, imageUrl)
                 }
             }){
-                Text("Download")
+                Text("Download", fontFamily = poppinsFontFamily)
             }
         } else {
             Box(
@@ -802,7 +854,7 @@ fun DisplayNotificationImage(imageUrl: String?, deviceName: String?, onBack: () 
                             tint = Color.Gray // Customize color if needed
                         )
                     }
-                    Text(text = "Image not available")
+                    Text(text = "Image not available", fontFamily = poppinsFontFamily)
                 }
             }
         }
