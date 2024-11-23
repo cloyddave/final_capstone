@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "com.group5.safehomenotifier"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "group5.safehomenotifier.com"
         minSdk = 30
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -50,7 +50,15 @@ android {
 
 dependencies {
 
-        implementation ("androidx.navigation:navigation-compose:2.6.0")
+        implementation ("androidx.navigation:navigation-compose:2.8.4")
+       // implementation("androidx.credentials:credentials:1.5.0-beta01")
+       // implementation("androidx.credentials:credentials-play-services-auth:1.5.0-beta01")
+        implementation("androidx.datastore:datastore-preferences:1.0.0")
+        implementation ("com.google.android.gms:play-services-auth:21.2.0")
+        implementation ("com.google.firebase:firebase-auth:21.3.0")
+        implementation ("androidx.credentials:credentials:<latest version>")
+        implementation ("androidx.credentials:credentials-play-services-auth:<latest version>")
+      //implementation ("com.google.firebase:firebase-auth:22.0.0")
         implementation("com.google.firebase:firebase-auth:23.1.0")
         implementation (platform("com.google.firebase:firebase-bom:32.0.0"))
         implementation("com.google.firebase:firebase-functions-ktx:20.1.1")
@@ -81,6 +89,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.firebase.auth.ktx)
+    implementation(libs.androidx.storage)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

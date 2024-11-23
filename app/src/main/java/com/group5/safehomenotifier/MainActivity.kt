@@ -2,7 +2,6 @@ package com.group5.safehomenotifier
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.DownloadManager
 import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.os.Build
@@ -44,6 +43,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color.Companion.Black
 import androidx.compose.ui.graphics.Color.Companion.White
@@ -56,9 +56,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStream
 import java.net.URL
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import com.google.android.play.core.integrity.x
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.group5.safehomenotifier.ui.theme.CharcoalBlue
 import com.group5.safehomenotifier.ui.theme.poppinsFontFamily
 
@@ -90,18 +92,46 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
 
         setContent {
-            if (auth.currentUser != null) {
-            SafeHomeNotifierApp(
-                historyImages = historyImages,
-                imageUrl = imageUrl
-            )
-        } else{
-                SignInScreen(onSignInSuccess = {
-                    // Navigate to main screen upon successful sign-in
-                    recreate()
-                })
+            val navController = rememberNavController()
+            val auth = FirebaseAuth.getInstance()
+            val isUserLoggedIn = remember { mutableStateOf(auth.currentUser != null) }
 
-            }        }
+            // Observe FirebaseAuth state
+            LaunchedEffect(auth) {
+                auth.addAuthStateListener { firebaseAuth ->
+                    isUserLoggedIn.value = firebaseAuth.currentUser != null
+                }
+            }
+
+            NavHost(
+                navController = navController,
+                startDestination = if (isUserLoggedIn.value) "main_screen" else "sign_in"
+            ) {
+                composable("sign_in") {
+                    SignInScreen(
+                        onSignInSuccess = {
+                            navController.navigate("main_screen") {
+                                popUpTo("sign_in") { inclusive = true }
+                            }
+                        }
+                    )
+                }
+
+                composable("main_screen") {
+                    SafeHomeNotifierApp(
+                        historyImages = historyImages,
+                        imageUrl = imageUrl,
+                        onNavigateToSignIn = {
+                            auth.signOut() // Log out the user
+                            navController.navigate("sign_in") {
+                                popUpTo("main_screen") { inclusive = true }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
     }
 
     private fun setStarted() {
@@ -145,6 +175,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
     @Composable
     fun SignInScreen(onSignInSuccess: () -> Unit) {
         var email by remember { mutableStateOf("") }
@@ -152,84 +183,101 @@ class MainActivity : ComponentActivity() {
         val auth = FirebaseAuth.getInstance()
         FirebaseFirestore.getInstance()
 
-        Column(
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(CharcoalBlue)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(16.dp), // Add padding to the Box if desired
         ) {
-            TextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email", fontFamily = poppinsFontFamily) }
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            TextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Password", fontFamily = poppinsFontFamily) },
-                //visualTransformation = PasswordVisualTransformation()
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = {
-                    auth.signInWithEmailAndPassword(email, password)
-                        .addOnCompleteListener { task ->
-                            if (task.isSuccessful) {
-                                // After successful sign-in, save the user info in Firestore (optional)
-                                val user = auth.currentUser
-                                val userEmail = user?.email
-                                if (userEmail != null) {
-                                    saveUserToFirestore(userEmail)
-                                }
-                                Toast.makeText(
-                                    auth.app.applicationContext,
-                                    "Sign-in successful",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                onSignInSuccess() // Proceed to main screen
-                            } else {
-                                Toast.makeText(
-                                    auth.app.applicationContext,
-                                    "Sign-in failed: ${task.exception?.message}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.LightGray
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(CharcoalBlue)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("Sign Up",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontFamily = poppinsFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = (Color.LightGray),
+                    textAlign = TextAlign.Center
                 )
-            ) {
-                Text("Sign In", fontFamily = poppinsFontFamily, color = Black)
-            }
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(15.dp))
+                TextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email", fontFamily = poppinsFontFamily) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password", fontFamily = poppinsFontFamily) },
+                    //visualTransformation = PasswordVisualTransformation()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
 
-            Button(
-                onClick = {
-                    auth.createUserWithEmailAndPassword(email, password)
-                        .addOnCompleteListener { task ->
-                            if (task.isSuccessful) {
-                                Toast.makeText(
-                                    auth.app.applicationContext,
-                                    "Sign-up successful",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                onSignInSuccess() // Proceed to main screen
-                            } else {
-                                Toast.makeText(
-                                    auth.app.applicationContext,
-                                    "Sign-up failed: ${task.exception?.message}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                }
-            ) {
-                Text("Register", fontFamily = poppinsFontFamily)
-            }
+                   Button(
+                       onClick = {
+                           auth.signInWithEmailAndPassword(email, password)
+                               .addOnCompleteListener { task ->
+                                   if (task.isSuccessful) {
+                                       // After successful sign-in, save the user info in Firestore (optional)
+                                       val user = auth.currentUser
+                                       val userEmail = user?.email
+                                       if (userEmail != null) {
+                                           saveUserToFirestore(userEmail)
+                                       }
+                                       Toast.makeText(
+                                           auth.app.applicationContext,
+                                           "Sign-in successful",
+                                           Toast.LENGTH_SHORT
+                                       ).show()
+                                       onSignInSuccess() // Proceed to main screen
+                                   } else {
+                                       Toast.makeText(
+                                           auth.app.applicationContext,
+                                           "Sign-in failed: ${task.exception?.message}",
+                                           Toast.LENGTH_SHORT
+                                       ).show()
+                                   }
+                               }
+                       },
+                       colors = ButtonDefaults.buttonColors(
+                           containerColor = Color.LightGray
+                       )
+                   ) {
+                       Text("Sign In", fontFamily = poppinsFontFamily, color = Black)
+                   }
+                   Spacer(modifier = Modifier.height(8.dp))
+
+                   Button(
+                       onClick = {
+                           auth.createUserWithEmailAndPassword(email, password)
+                               .addOnCompleteListener { task ->
+                                   if (task.isSuccessful) {
+                                       Toast.makeText(
+                                           auth.app.applicationContext,
+                                           "Sign-up successful",
+                                           Toast.LENGTH_SHORT
+                                       ).show()
+                                       onSignInSuccess() // Proceed to main screen
+                                   } else {
+                                       Toast.makeText(
+                                           auth.app.applicationContext,
+                                           "Sign-up failed: ${task.exception?.message}",
+                                           Toast.LENGTH_SHORT
+                                       ).show()
+                                   }
+                               }
+                       }
+                   ) {
+                       Text("Sign Up" +
+                               "", fontFamily = poppinsFontFamily)
+                   }
+               }
         }
     }
 
@@ -257,309 +305,224 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun SafeHomeNotifierApp(
         historyImages: MutableList<String>,
-        imageUrl: String?
+        imageUrl: String?,
+        onNavigateToSignIn: () -> Unit,
     ) {
         var isRegistering by rememberSaveable { mutableStateOf(false) }
         val isRegisteredSuccessfully by rememberSaveable { mutableStateOf(isDeviceRegistered()) }
         var showHistory by remember { mutableStateOf(false) }
         var imageDisplay by remember { mutableStateOf(false) }
         var renameDevice by remember { mutableStateOf(false) }
-        var loggedOut by remember { mutableStateOf(false) }
+        var expanded by remember { mutableStateOf(false) }
+
         val deviceName = intent.getStringExtra("deviceName")
 
-
-        if (loggedOut) {
-            // When logged out, navigate to SignInScreen
-            SignInScreen(onSignInSuccess = {
-                loggedOut = false // Reset logout state
-            })
-        } else {
-            Scaffold(
-                /*
-                topBar = {
-                    TopAppBar(
-                        title = { Text("Esp32Eye", color = Color.White, fontFamily = poppinsFontFamily, fontWeight = FontWeight.Normal) },
-                        actions = {
-                            if (isStarted && !isRegisteredSuccessfully) {
-                                IconButton(onClick = { isRegistering = true }) {
-                                    Icon(Icons.Filled.Add, contentDescription = "Add Device")
+        Scaffold(
+            content = {
+                when {
+                    isRegistering -> {
+                        RegisterEsp32Screen(onBack = { isRegistering = false })
+                    }
+                    showHistory -> {
+                        HistoryScreen(
+                            historyImages = historyImages,
+                            deviceName = deviceName,
+                            onBack = { showHistory = false }
+                        )
+                    }
+                    imageDisplay -> {
+                        DisplayNotificationImage(
+                            imageUrl = imageUrl,
+                            deviceName = deviceName,
+                            onBack = { imageDisplay = false },
+                            context = LocalContext.current
+                        )
+                    }
+                    renameDevice -> {
+                        RenameEsp32Screen(onBack = { renameDevice = false })
+                    }
+                    else -> {
+                        // Main Screen Content
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFF364559))
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            // Welcome Message
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "Welcome to ESP32Eye",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontFamily = poppinsFontFamily,
+                                        fontWeight = FontWeight.Normal,
+                                        color = Color.LightGray,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Your safety, our priority.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontFamily = poppinsFontFamily,
+                                        fontWeight = FontWeight.Normal,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    )
                                 }
                             }
-                        }// Purple background
-                    )
-                },*/
-                content = { _ ->
-                    when {
-                        isRegistering -> {
-                            RegisterEsp32Screen(
-                                onBack = { isRegistering = false }
-                            )
-                        }
 
+                            // Bottom Row with Icons
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                // Notification Icon
+                                Box(contentAlignment = Alignment.TopEnd) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Notifications,
+                                        contentDescription = "Notification Icon",
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clickable { imageDisplay = true },
+                                        tint = Color.White
+                                    )
 
-                        showHistory -> {
-                            HistoryScreen(
-                                historyImages,
-                                deviceName = deviceName,
-                                onBack = { showHistory = false }
-                            )
-                            // Go back to main when back is clicked
-                        }
+                                    if (imageUrl != null) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(10.dp)
+                                                .offset(x = 12.dp, y = (-4).dp)
+                                                .clip(CircleShape)
+                                                .background(Color.Red)
+                                        )
+                                    }
+                                }
 
-                        imageDisplay -> {
-                            DisplayNotificationImage(
-                                imageUrl = imageUrl,
-                                deviceName = deviceName,
-                                onBack = { imageDisplay = false },
-                                context = LocalContext.current
-                            )
-                            // Go back to main when back is clicked
-                        }
-
-                        renameDevice -> {
-                            RenameEsp32Screen(
-                                onBack = { renameDevice = false }
-                            )
-                        }
-
-                        loggedOut -> {
-                            LogOutUser(
-                                onLoggedOut = { loggedOut = false })
-                        }
-
-                        isRegisteredSuccessfully -> {
-                            // Navigate to MainScreen once registered successfully
-                            MainScreen(
-                                onAddDevice = {
-                                    isRegistering = true
-                                },
-                                onShowHistory = { showHistory = true },
-                                onDisplay = { imageDisplay = true },
-                                onRenameDevice = { renameDevice = true },
-                                onLoggedOut = { loggedOut = true },
-                                imageUrl = imageUrl
-
-
-
+                                // Add Device Icon
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = "Add Icon",
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clickable { isRegistering = true },
+                                    tint = Color.White
                                 )
-                        }
 
-                        else -> {
-                            MainScreen(
-                                onAddDevice = {
-                                    isRegistering = true
-                                },
-                                onShowHistory = { showHistory = true },
-                                onDisplay = { imageDisplay = false },
-                                onRenameDevice = { renameDevice = true },
-                                onLoggedOut = { loggedOut = true },
-                                imageUrl = imageUrl
+                                // Menu Icon
+                                IconButton(onClick = { expanded = true }) {
+                                    Icon(
+                                        Icons.Filled.Menu,
+                                        contentDescription = "Menu Icon",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                }
+                            }
 
-
-
-                            )
+                            // Dropdown Menu
+                            DropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    onClick = {
+                                        expanded = false
+                                        showHistory = true
+                                    },
+                                    text = { Text("History", fontFamily = poppinsFontFamily) }
+                                )
+                                DropdownMenuItem(
+                                    onClick = {
+                                        expanded = false
+                                        renameDevice = true
+                                    },
+                                    text = { Text("Rename Device", fontFamily = poppinsFontFamily) }
+                                )
+                                DropdownMenuItem(
+                                    onClick = {
+                                        expanded = false
+                                        FirebaseAuth.getInstance().signOut()
+                                        onNavigateToSignIn()
+                                    },
+                                    text = { Text("Log Out", fontFamily = poppinsFontFamily) }
+                                )
+                            }
                         }
                     }
                 }
-            )
-        }
-    }
-
-    @SuppressLint("NewApi")
-    @Composable
-    fun MainScreen(
-        onAddDevice: () -> Unit,
-        onShowHistory: () -> Unit,
-        onDisplay: () -> Unit,
-        onRenameDevice: () -> Unit,
-        onLoggedOut: () -> Unit,
-        imageUrl: String?,
-    ) {
-        var expanded by remember { mutableStateOf(false) }
-
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF364559))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.SpaceBetween // This will space content evenly
-            ) {
-                // Main content
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .weight(1f), // Use weight to allow this box to take up remaining space
-                        contentAlignment = Alignment.Center // Center the content vertically
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally // Center horizontally within the Column
-                        ) {
-                            Text(
-                                text = "Welcome to ESP32Eye",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontFamily = poppinsFontFamily,
-                                fontWeight = FontWeight.Normal,
-                                color = (Color.LightGray),
-                                textAlign = TextAlign.Center // Center the text
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Your safety, our priority.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontFamily = poppinsFontFamily,
-                                fontWeight = FontWeight.Normal,
-                                color = (Color.White),
-                                textAlign = TextAlign.Center // Center the text
-                            )
-                        }
-                    }
-
-                    // Bottom Row with Home, Notification, and Menu icons
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceEvenly // Space evenly between icons
-                    ) {
-                        // Notification Icon
-                        Box(
-                            contentAlignment = Alignment.TopEnd
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Notifications,
-                                contentDescription = "Notification Icon",
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clickable {
-                                        onDisplay()
-                                    },
-                                tint = Color.White
-                            )
-
-                            if (imageUrl != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                    . offset (x = 12.dp, y = (-4).dp)
-                                .clip(CircleShape)
-                                    .background(Color.Red)
-                                )
-                            }
-                        }
-
-
-                        Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = "Add Icon",
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clickable {
-                                    onAddDevice()
-                                },
-                            tint = Color.White
-                        )
-
-
-
-                        // Menu Icon for dropdown
-                        IconButton(onClick = { expanded = true }) {
-                            Icon(
-                                Icons.Filled.Menu,
-                                contentDescription = "Menu Icon",
-                                tint = Color.White,
-                                modifier = Modifier.size(40.dp)
-                            )
-                        }
-                    }
-
-                    // Dropdown menu
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-
-                        DropdownMenuItem(
-                            onClick = {
-                                expanded = false
-                                onShowHistory()
-                            },
-                            text = { Text("History", fontFamily = poppinsFontFamily) }
-                        )
-
-                        DropdownMenuItem(
-                            onClick = {
-                                expanded = false
-                                onRenameDevice()  // Trigger the function to rename registered device
-                            },
-                            text = { Text("Rename Device", fontFamily = poppinsFontFamily) }
-                        )
-
-                        DropdownMenuItem(
-                            onClick = {
-                                expanded = false
-                               onLoggedOut()
-                            },
-                            text = { Text("Log Out", fontFamily = poppinsFontFamily) }
-                        )
-
-                    }
             }
-        }
-
-    @Composable
-    private fun LogOutUser(onLoggedOut: () -> Unit) {
-            FirebaseAuth.getInstance().signOut()
-        onLoggedOut ()
+        )
     }
+
 
 
 
     @Composable
     fun HistoryScreen(historyImages: List<String>, deviceName: String?, onBack: () -> Unit) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CharcoalBlue)
+                .padding(16.dp), // Add padding to the Box if desired
+            contentAlignment = Alignment.Center // Center the contents
+        ) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-
-            Column(modifier = Modifier.padding(16.dp)) {
-                IconButton(onClick = { onBack() }) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = Color.Gray // Customize color if needed
-                    )
-                }
-                Text("History of Images:", fontFamily = poppinsFontFamily, fontWeight = FontWeight.Normal)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (deviceName != null) {
-                    Text(
-                        text = deviceName,
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-                LazyColumn {
-                    items(historyImages) { imageUrl ->
-                        val painter = rememberAsyncImagePainter(imageUrl)
-                        Image(
-                            painter = painter,
-                            contentDescription = "Historical image",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(300.dp)
-                                .padding(8.dp),
-                            contentScale = ContentScale.Crop
+                Column(modifier = Modifier.padding(16.dp)) {
+                    IconButton(onClick = { onBack() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = White // Customize color if needed
                         )
                     }
+                    Text(
+                        "History of Images:",
+                        fontFamily = poppinsFontFamily,
+                        fontWeight = FontWeight.Normal,
+                        color = White
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (deviceName != null) {
+                        Text(
+                            text = deviceName,
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                    LazyColumn {
+                        items(historyImages) { imageUrl ->
+                            val painter = rememberAsyncImagePainter(imageUrl)
+                            Image(
+                                painter = painter,
+                                contentDescription = "Historical image",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(300.dp)
+                                    .padding(8.dp),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
             }
         }
     }
 
-//Verify or check credential to Firebase firestore
+    //Verify or check credential to Firebase firestore
     private fun verifyDeviceCredentials(
         deviceId: String,
         token: String,
@@ -582,7 +545,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
     }
- //Registration User Interface(UI)
+    //Registration User Interface(UI)
     @Composable
     fun RegisterEsp32Screen(onBack: () -> Unit) {
         var deviceId by remember { mutableStateOf("") }
@@ -605,9 +568,16 @@ class MainActivity : ComponentActivity() {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color.White // Customize color if needed
+                        tint = White // Customize color if needed
                     )
                 }
+                Text("Add New Device",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontFamily = poppinsFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = (Color.LightGray),
+                    textAlign = TextAlign.Center
+                )
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = deviceId,
@@ -640,7 +610,7 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                     colors = ButtonDefaults.buttonColors(
-                       containerColor = Color.LightGray
+                        containerColor = Color.LightGray
                     )
                 )
 
@@ -656,7 +626,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
- //Rename Screen User Interface
+    //Rename Screen User Interface
     @Composable
     fun RenameEsp32Screen(onBack: () -> Unit) {
         var deviceId by remember { mutableStateOf("") }
@@ -671,15 +641,24 @@ class MainActivity : ComponentActivity() {
                 .padding(16.dp), // Add padding to the Box if desired
             contentAlignment = Alignment.Center // Center the contents
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+
+            Column(modifier = Modifier.padding(16.dp)
+            ) {
                 IconButton(onClick = { onBack() }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color.White // Customize color if needed
+                        tint = White // Customize color if needed
                     )
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Text("Rename Device",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontFamily = poppinsFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = (Color.LightGray),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(15.dp))
                 TextField(
                     value = deviceId,
                     onValueChange = { deviceId = it },
@@ -727,7 +706,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-//Logic to rename device
+    //Logic to rename device
     private fun renameEsp32Device(
         token: String,
         deviceId: String,
@@ -743,7 +722,7 @@ class MainActivity : ComponentActivity() {
                 "deviceName" to deviceName,
                 "fcmToken" to fcmToken,
 
-            )
+                )
 
             db.collection("devices").document(deviceId).set(esp32Data)
                 .addOnSuccessListener {
@@ -757,7 +736,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-//Logic to register device
+    //Logic to register device
     private fun registerEsp32Device(
         token: String,
         deviceId: String,
@@ -795,66 +774,73 @@ class MainActivity : ComponentActivity() {
 //Image Item received by application
 @Composable
 fun DisplayNotificationImage(imageUrl: String?, deviceName: String?, onBack: () -> Unit, context: Context) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .background(CharcoalBlue)
+            .padding(16.dp), // Add padding to the Box if desired
+        contentAlignment = Alignment.Center // Center the contents
     ) {
-        IconButton(onClick = { onBack() }) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = Color.Gray // Customize color if needed
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (deviceName != null) {
-            Text(
-                text = deviceName,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(16.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (imageUrl != null) {
-            val painter = rememberAsyncImagePainter(imageUrl)
-            Image(
-                painter = painter,
-                contentDescription = "Hurry! Your house is on fire!",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp),
-                contentScale = ContentScale.Crop
-            )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = AbsoluteAlignment.Left,
+            verticalArrangement = Arrangement.Center
+        ) {
+            IconButton(onClick = { onBack() }) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = White // Customize color if needed
+                )
+            }
+             Text("Notification",
+                 style = MaterialTheme.typography.headlineMedium,
+                 fontFamily = poppinsFontFamily,
+                 fontWeight = FontWeight.Normal,
+                 color = (Color.LightGray),
+                 textAlign = TextAlign.Center
+                 )
             Spacer(modifier = Modifier.height(16.dp))
 
-            Button(onClick = {
-                CoroutineScope(Dispatchers.IO).launch {
-                    downloadImageUsingMediaStore(context, imageUrl)
-                }
-            }){
-                Text("Download", fontFamily = poppinsFontFamily)
+            if (deviceName != null) {
+                Text(
+                    text = deviceName,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(16.dp)
+                )
             }
-        } else {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    IconButton(onClick = { onBack() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.Gray // Customize color if needed
-                        )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (imageUrl != null) {
+                val painter = rememberAsyncImagePainter(imageUrl)
+                Image(
+                    painter = painter,
+                    contentDescription = "Hurry! Your house is on fire!",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(onClick = {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        downloadImageUsingMediaStore(context, imageUrl)
                     }
-                    Text(text = "Image not available", fontFamily = poppinsFontFamily)
+                }) {
+                    Text("Download", fontFamily = poppinsFontFamily)
+                }
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(text = "Image not available", fontFamily = poppinsFontFamily, color = White)
+                    }
                 }
             }
         }
@@ -894,19 +880,3 @@ suspend fun downloadImageUsingMediaStore(context: Context, imageUrl: String) {
         }
     }
 }
-/*
-@Composable
-private fun DownloadImageUrl(imageUrl: String, onDownloadImage: () -> Unit) {
-    val context = LocalContext.current
-    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    val request = DownloadManager.Request(Uri.parse(imageUrl))
-        .setTitle("Downloading Image")
-        .setDescription("Image is being downloaded...")
-        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "downloaded_image.jpg")
-        .setAllowedOverMetered(true)
-        .setAllowedOverRoaming(true)
-
-    downloadManager.enqueue(request)
-}
-*/
