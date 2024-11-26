@@ -41,6 +41,7 @@ import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.ui.AbsoluteAlignment
@@ -48,6 +49,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color.Companion.Black
 import androidx.compose.ui.graphics.Color.Companion.White
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.TextAlign
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
@@ -57,7 +60,8 @@ import kotlinx.coroutines.withContext
 import java.io.OutputStream
 import java.net.URL
 import androidx.compose.ui.text.font.FontWeight
-import androidx.navigation.NavController
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -107,16 +111,37 @@ class MainActivity : ComponentActivity() {
                 navController = navController,
                 startDestination = if (isUserLoggedIn.value) "main_screen" else "sign_in"
             ) {
+                // Sign-In Screen
                 composable("sign_in") {
                     SignInScreen(
                         onSignInSuccess = {
                             navController.navigate("main_screen") {
                                 popUpTo("sign_in") { inclusive = true }
                             }
+                        },
+                        navigateToSignUp = {
+                            navController.navigate("sign_up") // Navigate to sign-up screen
                         }
                     )
                 }
 
+                // Sign-Up Screen
+                composable("sign_up") {
+                    SignUpScreen(
+                        onNavigateToSignIn = {
+                            // Navigate to the sign-in screen after successful sign-up
+                            navController.navigate("sign_in") {
+                                popUpTo("sign_up") { inclusive = true }
+                            }
+                        },
+                        navigateToSignIn = {
+                            navController.navigate("sign_in") // Navigate to sign-in screen
+                        }
+                    )
+                }
+
+
+                // Main Screen
                 composable("main_screen") {
                     SafeHomeNotifierApp(
                         historyImages = historyImages,
@@ -132,7 +157,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+
     }
+
+
 
     private fun setStarted() {
         val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
@@ -175,20 +203,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
     @Composable
-    fun SignInScreen(onSignInSuccess: () -> Unit) {
+    fun SignUpScreen(onNavigateToSignIn: () -> Unit, navigateToSignIn: () -> Unit) {
         var email by remember { mutableStateOf("") }
         var password by remember { mutableStateOf("") }
         val auth = FirebaseAuth.getInstance()
-        FirebaseFirestore.getInstance()
-
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(CharcoalBlue)
-                .padding(16.dp), // Add padding to the Box if desired
+                .padding(16.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -197,11 +222,12 @@ class MainActivity : ComponentActivity() {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.Center
             ) {
-                Text("Sign Up",
+                Text(
+                    "Sign Up",
                     style = MaterialTheme.typography.headlineLarge,
                     fontFamily = poppinsFontFamily,
                     fontWeight = FontWeight.Normal,
-                    color = (Color.LightGray),
+                    color = Color.LightGray,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(15.dp))
@@ -214,72 +240,173 @@ class MainActivity : ComponentActivity() {
                 TextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Password", fontFamily = poppinsFontFamily) },
-                    //visualTransformation = PasswordVisualTransformation()
+                    label = { Text("Password", fontFamily = poppinsFontFamily) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                   Button(
-                       onClick = {
-                           auth.signInWithEmailAndPassword(email, password)
-                               .addOnCompleteListener { task ->
-                                   if (task.isSuccessful) {
-                                       // After successful sign-in, save the user info in Firestore (optional)
-                                       val user = auth.currentUser
-                                       val userEmail = user?.email
-                                       if (userEmail != null) {
-                                           saveUserToFirestore(userEmail)
-                                       }
-                                       Toast.makeText(
-                                           auth.app.applicationContext,
-                                           "Sign-in successful",
-                                           Toast.LENGTH_SHORT
-                                       ).show()
-                                       onSignInSuccess() // Proceed to main screen
-                                   } else {
-                                       Toast.makeText(
-                                           auth.app.applicationContext,
-                                           "Sign-in failed: ${task.exception?.message}",
-                                           Toast.LENGTH_SHORT
-                                       ).show()
-                                   }
-                               }
-                       },
-                       colors = ButtonDefaults.buttonColors(
-                           containerColor = Color.LightGray
-                       )
-                   ) {
-                       Text("Sign In", fontFamily = poppinsFontFamily, color = Black)
-                   }
-                   Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        auth.createUserWithEmailAndPassword(email, password)
+                            .addOnCompleteListener { task ->
+                                if (task.isSuccessful) {
+                                    val user = auth.currentUser
+                                    user?.sendEmailVerification()?.addOnCompleteListener { emailTask ->
+                                        if (emailTask.isSuccessful) {
+                                            Toast.makeText(
+                                                auth.app.applicationContext,
+                                                "Sign-up successful! Please check your email to verify your account before logging in.",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            // Navigate to Sign-In screen after sending email
+                                            onNavigateToSignIn()
+                                        } else {
+                                            Toast.makeText(
+                                                auth.app.applicationContext,
+                                                "Error sending verification email: ${emailTask.exception?.message}",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                } else {
+                                    Toast.makeText(
+                                        auth.app.applicationContext,
+                                        "Sign-up failed: ${task.exception?.message}",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray)
+                ) {
+                    Text("Sign Up", fontFamily = poppinsFontFamily, color = Black)
+                }
 
-                   Button(
-                       onClick = {
-                           auth.createUserWithEmailAndPassword(email, password)
-                               .addOnCompleteListener { task ->
-                                   if (task.isSuccessful) {
-                                       Toast.makeText(
-                                           auth.app.applicationContext,
-                                           "Sign-up successful",
-                                           Toast.LENGTH_SHORT
-                                       ).show()
-                                       onSignInSuccess() // Proceed to main screen
-                                   } else {
-                                       Toast.makeText(
-                                           auth.app.applicationContext,
-                                           "Sign-up failed: ${task.exception?.message}",
-                                           Toast.LENGTH_SHORT
-                                       ).show()
-                                   }
-                               }
-                       }
-                   ) {
-                       Text("Sign Up" +
-                               "", fontFamily = poppinsFontFamily)
-                   }
-               }
+                ClickableText(
+                    text = AnnotatedString.Builder().apply {
+                        append("Already have an account?")
+                        withStyle(
+                            style = SpanStyle(
+                                color = Color.Cyan, // Highlight color for "Sign Up"
+                                textDecoration = TextDecoration.Underline // Underline for "Sign Up"
+                            )
+                        ) {
+                            append("Sign Up")
+                        }
+                    }.toAnnotatedString(),
+                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.LightGray),
+                    onClick = { offset ->
+                        if (offset in "Already have an account? ".length until "Already have an account? Sign In".length) {
+                            navigateToSignIn()
+                        }
+                    },
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
         }
     }
+
+
+    @Composable
+    fun SignInScreen(onSignInSuccess: () -> Unit, navigateToSignUp: () -> Unit) {
+        var email by remember { mutableStateOf("") }
+        var password by remember { mutableStateOf("") }
+        val auth = FirebaseAuth.getInstance()
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CharcoalBlue)
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(CharcoalBlue)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    "Sign In",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontFamily = poppinsFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.LightGray,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(15.dp))
+                TextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email", fontFamily = poppinsFontFamily) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password", fontFamily = poppinsFontFamily) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = {
+                        auth.signInWithEmailAndPassword(email, password)
+                            .addOnCompleteListener { task ->
+                                if (task.isSuccessful) {
+                                    val user = auth.currentUser
+                                    if (user?.isEmailVerified == true) {
+                                        Toast.makeText(
+                                            auth.app.applicationContext,
+                                            "Sign-In Successfully",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        onSignInSuccess() // Proceed to the main screen
+                                    } else {
+                                        Toast.makeText(
+                                            auth.app.applicationContext,
+                                            "Please verify your email before signing in.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                } else {
+                                    Toast.makeText(
+                                        auth.app.applicationContext,
+                                        "Sign-in failed: ${task.exception?.message}",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray)
+                ) {
+                    Text("Sign In", fontFamily = poppinsFontFamily, color = Black)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ClickableText(
+                    text = AnnotatedString.Builder().apply {
+                        append("Didn't already sign in? ")
+                        withStyle(
+                            style = SpanStyle(
+                                color = Color.Cyan, // Highlight color for "Sign Up"
+                                textDecoration = TextDecoration.Underline // Underline for "Sign Up"
+                            )
+                        ) {
+                            append("Sign Up")
+                        }
+                    }.toAnnotatedString(),
+                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.LightGray),
+                    onClick = { offset ->
+                        if (offset in "Didn't already sign in? ".length until "Didn't already sign in? Sign Up".length) {
+                            navigateToSignUp()
+                        }
+                    },
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+        }
+    }
+
+
 
     fun saveUserToFirestore(email: String) {
         val db = FirebaseFirestore.getInstance()
