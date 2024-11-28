@@ -60,13 +60,19 @@ import kotlinx.coroutines.withContext
 import java.io.OutputStream
 import java.net.URL
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.lint.kotlin.metadata.Visibility
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.group5.safehomenotifier.ui.theme.CharcoalBlue
 import com.group5.safehomenotifier.ui.theme.poppinsFontFamily
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+
 
 
 class MainActivity : ComponentActivity() {
@@ -207,6 +213,8 @@ class MainActivity : ComponentActivity() {
     fun SignUpScreen(onNavigateToSignIn: () -> Unit, navigateToSignIn: () -> Unit) {
         var email by remember { mutableStateOf("") }
         var password by remember { mutableStateOf("") }
+        var passwordError by remember { mutableStateOf("") } // State for error message
+        var passwordVisible by remember { mutableStateOf(false) } // State for password visibility
         val auth = FirebaseAuth.getInstance()
 
         Box(
@@ -239,44 +247,65 @@ class MainActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Password", fontFamily = poppinsFontFamily) }
+                    onValueChange = {
+                        password = it
+                        passwordError = validatePassword(it) // Update error state
+                    },
+                    label = { Text("Password", fontFamily = poppinsFontFamily) },
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(imageVector = image, contentDescription = "Toggle password visibility")
+                        }
+                    }
                 )
+                // Display password error
+                if (passwordError.isNotEmpty()) {
+                    Text(
+                        passwordError,
+                        color = Color.Red,
+                        fontFamily = poppinsFontFamily,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = {
-                        auth.createUserWithEmailAndPassword(email, password)
-                            .addOnCompleteListener { task ->
-                                if (task.isSuccessful) {
-                                    val user = auth.currentUser
-                                    user?.sendEmailVerification()?.addOnCompleteListener { emailTask ->
-                                        if (emailTask.isSuccessful) {
-                                            Toast.makeText(
-                                                auth.app.applicationContext,
-                                                "Sign-up successful! Please check your email to verify your account before logging in.",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                            // Navigate to Sign-In screen after sending email
-                                            onNavigateToSignIn()
-                                        } else {
-                                            Toast.makeText(
-                                                auth.app.applicationContext,
-                                                "Error sending verification email: ${emailTask.exception?.message}",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                        if (passwordError.isEmpty()) { // Proceed only if password is valid
+                            auth.createUserWithEmailAndPassword(email, password)
+                                .addOnCompleteListener { task ->
+                                    if (task.isSuccessful) {
+                                        val user = auth.currentUser
+                                        user?.sendEmailVerification()?.addOnCompleteListener { emailTask ->
+                                            if (emailTask.isSuccessful) {
+                                                Toast.makeText(
+                                                    auth.app.applicationContext,
+                                                    "Sign-up successful! Please check your email to verify your account before logging in.",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                                onNavigateToSignIn()
+                                            } else {
+                                                Toast.makeText(
+                                                    auth.app.applicationContext,
+                                                    "Error sending verification email: ${emailTask.exception?.message}",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
                                         }
+                                    } else {
+                                        Toast.makeText(
+                                            auth.app.applicationContext,
+                                            "Sign-up failed: ${task.exception?.message}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
-                                } else {
-                                    Toast.makeText(
-                                        auth.app.applicationContext,
-                                        "Sign-up failed: ${task.exception?.message}",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
                                 }
-                            }
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
+                    enabled = passwordError.isEmpty() // Disable button if error exists
                 ) {
                     Text("Sign Up", fontFamily = poppinsFontFamily, color = Black)
                 }
@@ -286,11 +315,11 @@ class MainActivity : ComponentActivity() {
                         append("Already have an account?")
                         withStyle(
                             style = SpanStyle(
-                                color = Color.Cyan, // Highlight color for "Sign Up"
-                                textDecoration = TextDecoration.Underline // Underline for "Sign Up"
+                                color = Color.Cyan,
+                                textDecoration = TextDecoration.Underline
                             )
                         ) {
-                            append("Sign Up")
+                            append(" Sign In")
                         }
                     }.toAnnotatedString(),
                     style = MaterialTheme.typography.bodyLarge.copy(color = Color.LightGray),
@@ -305,10 +334,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Function to validate password complexity
+    private fun validatePassword(password: String): String {
+        return when {
+            password.length < 8 -> "Password must be at least 8 characters long."
+            !password.any { it.isUpperCase() } -> "Password must include at least one uppercase letter."
+            !password.any { it.isDigit() } -> "Password must include at least one number."
+            !password.any { "!@#$%^&*()-_=+[{]}|;:'\",<.>/?".contains(it) } -> "Password must include at least one special character."
+            else -> ""
+        }
+    }
 
     @Composable
     fun SignInScreen(onSignInSuccess: () -> Unit, navigateToSignUp: () -> Unit) {
         var email by remember { mutableStateOf("") }
+        var passwordVisible by remember { mutableStateOf(false) } // State for password visibility
+        var passwordError by remember { mutableStateOf("") } // State for error message
         var password by remember { mutableStateOf("") }
         val auth = FirebaseAuth.getInstance()
 
@@ -342,41 +383,62 @@ class MainActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Password", fontFamily = poppinsFontFamily) }
+                    onValueChange = {
+                        password = it
+                        passwordError = validatePassword(it) // Update error state
+                     },
+                    label = { Text("Password", fontFamily = poppinsFontFamily) },
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(imageVector = image, contentDescription = "Toggle password visibility")
+                        }
+                    }
                 )
+                if (passwordError.isNotEmpty()) {
+                    Text(
+                        passwordError,
+                        color = Color.Red,
+                        fontFamily = poppinsFontFamily,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = {
-                        auth.signInWithEmailAndPassword(email, password)
-                            .addOnCompleteListener { task ->
-                                if (task.isSuccessful) {
-                                    val user = auth.currentUser
-                                    if (user?.isEmailVerified == true) {
-                                        Toast.makeText(
-                                            auth.app.applicationContext,
-                                            "Sign-In Successfully",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                        onSignInSuccess() // Proceed to the main screen
+                        if (passwordError.isEmpty()) {
+                            auth.signInWithEmailAndPassword(email, password)
+                                .addOnCompleteListener { task ->
+                                    if (task.isSuccessful) {
+                                        val user = auth.currentUser
+                                        if (user?.isEmailVerified == true) {
+                                            Toast.makeText(
+                                                auth.app.applicationContext,
+                                                "Sign-In Successfully",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            onSignInSuccess() // Proceed to the main screen
+                                        } else {
+                                            Toast.makeText(
+                                                auth.app.applicationContext,
+                                                "Please verify your email before signing in.",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
                                     } else {
                                         Toast.makeText(
                                             auth.app.applicationContext,
-                                            "Please verify your email before signing in.",
+                                            "Sign-in failed: ${task.exception?.message}",
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     }
-                                } else {
-                                    Toast.makeText(
-                                        auth.app.applicationContext,
-                                        "Sign-in failed: ${task.exception?.message}",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
                                 }
-                            }
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
+                    enabled = passwordError.isEmpty() // Disable button if error exists
                 ) {
                     Text("Sign In", fontFamily = poppinsFontFamily, color = Black)
                 }
@@ -436,7 +498,7 @@ class MainActivity : ComponentActivity() {
         onNavigateToSignIn: () -> Unit,
     ) {
         var isRegistering by rememberSaveable { mutableStateOf(false) }
-        val isRegisteredSuccessfully by rememberSaveable { mutableStateOf(isDeviceRegistered()) }
+        //val isRegisteredSuccessfully by rememberSaveable { mutableStateOf(isDeviceRegistered()) }
         var showHistory by remember { mutableStateOf(false) }
         var imageDisplay by remember { mutableStateOf(false) }
         var renameDevice by remember { mutableStateOf(false) }

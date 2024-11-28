@@ -1,5 +1,5 @@
 [versions]
-agp = "8.3.1"
+agp = "8.7.0"
 kotlin = "2.0.10"
 coreKtx = "1.13.1"
 junit = "4.13.2"
@@ -12,6 +12,7 @@ googleServices = "4.4.2"
 firebaseBom = "33.2.0"
 firebaseAuthKtx = "23.1.0"
 storage = "1.5.0"
+animationCoreLint = "1.8.0-alpha06"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -32,6 +33,7 @@ firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.r
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 firebase-auth-ktx = { group = "com.google.firebase", name = "firebase-auth-ktx", version.ref = "firebaseAuthKtx" }
 androidx-storage = { group = "androidx.test.services", name = "storage", version.ref = "storage" }
+androidx-animation-core-lint = { group = "androidx.compose.animation", name = "animation-core-lint", version.ref = "animationCoreLint" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

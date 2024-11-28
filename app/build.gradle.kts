@@ -51,7 +51,8 @@ android {
 dependencies {
 
         implementation ("androidx.navigation:navigation-compose:2.8.4")
-       // implementation("androidx.credentials:credentials:1.5.0-beta01")
+        implementation("androidx.compose.material:material-icons-extended:1.5.1")
+    // implementation("androidx.credentials:credentials:1.5.0-beta01")
        // implementation("androidx.credentials:credentials-play-services-auth:1.5.0-beta01")
         implementation("androidx.datastore:datastore-preferences:1.0.0")
         implementation ("com.google.android.gms:play-services-auth:21.2.0")
@@ -90,6 +91,8 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.firebase.auth.ktx)
     implementation(libs.androidx.storage)
+    implementation(libs.androidx.espresso.core)
+    implementation(libs.androidx.animation.core.lint)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
