@@ -167,7 +167,6 @@ class MainActivity : ComponentActivity() {
     }
 
 
-
     private fun setStarted() {
         val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
         with(sharedPreferences.edit()) {
@@ -175,7 +174,6 @@ class MainActivity : ComponentActivity() {
             apply()
         }
     }
-
 
 
     private fun setRegistrationStatus(isRegistered: Boolean) {
@@ -254,9 +252,13 @@ class MainActivity : ComponentActivity() {
                     label = { Text("Password", fontFamily = poppinsFontFamily) },
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
-                        val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                        val image =
+                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(imageVector = image, contentDescription = "Toggle password visibility")
+                            Icon(
+                                imageVector = image,
+                                contentDescription = "Toggle password visibility"
+                            )
                         }
                     }
                 )
@@ -278,22 +280,24 @@ class MainActivity : ComponentActivity() {
                                 .addOnCompleteListener { task ->
                                     if (task.isSuccessful) {
                                         val user = auth.currentUser
-                                        user?.sendEmailVerification()?.addOnCompleteListener { emailTask ->
-                                            if (emailTask.isSuccessful) {
-                                                Toast.makeText(
-                                                    auth.app.applicationContext,
-                                                    "Sign-up successful! Please check your email to verify your account before logging in.",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                onNavigateToSignIn()
-                                            } else {
-                                                Toast.makeText(
-                                                    auth.app.applicationContext,
-                                                    "Error sending verification email: ${emailTask.exception?.message}",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
+                                        saveUserToFirestore(user?.email!!)
+                                        user.sendEmailVerification()
+                                            .addOnCompleteListener { emailTask ->
+                                                if (emailTask.isSuccessful) {
+                                                    Toast.makeText(
+                                                        auth.app.applicationContext,
+                                                        "Sign-up successful! Please check your email to verify your account before logging in.",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                    onNavigateToSignIn()
+                                                } else {
+                                                    Toast.makeText(
+                                                        auth.app.applicationContext,
+                                                        "Error sending verification email: ${emailTask.exception?.message}",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
                                             }
-                                        }
                                     } else {
                                         Toast.makeText(
                                             auth.app.applicationContext,
@@ -386,13 +390,17 @@ class MainActivity : ComponentActivity() {
                     onValueChange = {
                         password = it
                         passwordError = validatePassword(it) // Update error state
-                     },
+                    },
                     label = { Text("Password", fontFamily = poppinsFontFamily) },
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
-                        val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                        val image =
+                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(imageVector = image, contentDescription = "Toggle password visibility")
+                            Icon(
+                                imageVector = image,
+                                contentDescription = "Toggle password visibility"
+                            )
                         }
                     }
                 )
@@ -414,6 +422,7 @@ class MainActivity : ComponentActivity() {
                                     if (task.isSuccessful) {
                                         val user = auth.currentUser
                                         if (user?.isEmailVerified == true) {
+                                            saveUserToFirestore(user.email!!)
                                             Toast.makeText(
                                                 auth.app.applicationContext,
                                                 "Sign-In Successfully",
@@ -469,7 +478,6 @@ class MainActivity : ComponentActivity() {
     }
 
 
-
     fun saveUserToFirestore(email: String) {
         val db = FirebaseFirestore.getInstance()
         val userRef = db.collection("users").document(email)
@@ -502,8 +510,8 @@ class MainActivity : ComponentActivity() {
         var showHistory by remember { mutableStateOf(false) }
         var imageDisplay by remember { mutableStateOf(false) }
         var renameDevice by remember { mutableStateOf(false) }
+        var changeToken by remember { mutableStateOf(false) }
         var expanded by remember { mutableStateOf(false) }
-
         val deviceName = intent.getStringExtra("deviceName")
 
         Scaffold(
@@ -512,6 +520,7 @@ class MainActivity : ComponentActivity() {
                     isRegistering -> {
                         RegisterEsp32Screen(onBack = { isRegistering = false })
                     }
+
                     showHistory -> {
                         HistoryScreen(
                             historyImages = historyImages,
@@ -519,6 +528,7 @@ class MainActivity : ComponentActivity() {
                             onBack = { showHistory = false }
                         )
                     }
+
                     imageDisplay -> {
                         DisplayNotificationImage(
                             imageUrl = imageUrl,
@@ -527,9 +537,15 @@ class MainActivity : ComponentActivity() {
                             context = LocalContext.current
                         )
                     }
+
                     renameDevice -> {
                         RenameEsp32Screen(onBack = { renameDevice = false })
                     }
+
+                    changeToken -> {
+                        UpdateDeviceTokenScreen(onBack = { changeToken = false })
+                    }
+
                     else -> {
                         // Main Screen Content
                         Column(
@@ -640,6 +656,18 @@ class MainActivity : ComponentActivity() {
                                 DropdownMenuItem(
                                     onClick = {
                                         expanded = false
+                                        changeToken = true
+                                    },
+                                    text = {
+                                        Text(
+                                            "Change Device Token",
+                                            fontFamily = poppinsFontFamily
+                                        )
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    onClick = {
+                                        expanded = false
                                         FirebaseAuth.getInstance().signOut()
                                         onNavigateToSignIn()
                                     },
@@ -653,7 +681,276 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun verifyDeviceCredentials(
+        deviceId: String,
+        token: String,
+        onResult: (Boolean) -> Unit
+    ) {
+        val functions = FirebaseFunctions.getInstance()
 
+        // Call the Firebase function 'checkDeviceCredentials'
+        functions
+            .getHttpsCallable("checkDeviceCredentials") // Name of your Firebase Cloud Function
+            .call(hashMapOf("device_id" to deviceId, "token" to token))
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val result = task.result?.data as? Map<*, *>
+                    val status = result?.get("status") as? String
+                    onResult(status == "success")
+                } else {
+                    Log.e("Firebase", "Error calling the function", task.exception)
+                    onResult(false)
+                }
+            }
+    }
+
+    //Registration User Interface(UI)
+    @Composable
+    fun RegisterEsp32Screen(onBack: () -> Unit) {
+        var deviceId by remember { mutableStateOf("") }
+        var token by remember { mutableStateOf("") }
+        var deviceName by remember { mutableStateOf("") }
+        var registrationStatus by remember { mutableStateOf("") }
+
+
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CharcoalBlue)
+                .padding(16.dp), // Add padding to the Box if desired
+            contentAlignment = Alignment.Center // Center the contents
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                IconButton(onClick = { onBack() }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = White // Customize color if needed
+                    )
+                }
+                Text(
+                    "Add New Device",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontFamily = poppinsFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = (Color.LightGray),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = deviceId,
+                    onValueChange = { deviceId = it },
+                    label = { Text("Device ID", fontFamily = poppinsFontFamily) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = token,
+                    onValueChange = { token = it },
+                    label = { Text("Input Device Token", fontFamily = poppinsFontFamily) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = deviceName,
+                    onValueChange = { deviceName = it },
+                    label = { Text("Device Name", fontFamily = poppinsFontFamily) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val userEmail = FirebaseAuth.getInstance().currentUser?.email
+                        if (userEmail != null) {
+                            verifyDeviceCredentials(deviceId, token) { isValid ->
+                                if (isValid) {
+                                    registerEsp32Device(userEmail, token, deviceId, deviceName) { success ->
+                                        registrationStatus =
+                                            if (success) "Device registered successfully." else "Failed to register device."
+                                    }
+                                } else {
+                                    registrationStatus = "Invalid device ID or token."
+                                }
+                            }
+                        } else {
+                            registrationStatus = "User not logged in."
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.LightGray
+                    )
+                ) {
+                    Text("Register Device", fontFamily = poppinsFontFamily, color = Black)
+                }
+                if (registrationStatus.isNotEmpty()) {
+                    Text(
+                        text = registrationStatus,
+                        color = if (registrationStatus.contains("success")) Color.Green else Color.Red
+                    )
+                }
+            }
+        }
+    }
+
+
+    // Updated Logic to Register Device
+    //Logic to register device
+    private fun registerEsp32Device(
+        email: String,
+        token: String,
+        deviceId: String,
+        deviceName: Any?,
+        onResult: (Boolean) -> Unit
+    ) {
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w("Firebase", "Fetching FCM token failed", task.exception)
+                return@addOnCompleteListener
+            }
+
+            val fcmToken = task.result
+            val esp32Data = hashMapOf(
+                "device_id" to deviceId,
+                "token" to token,
+                "registration_time" to System.currentTimeMillis(),
+                "status" to "active",
+                "fcmToken" to fcmToken,
+                "deviceName" to deviceName
+            )
+
+            db.collection("devices").document(deviceId).set(esp32Data)
+                .addOnSuccessListener {
+                    Log.d("Firestore", "Device registered successfully: $deviceId")
+
+                    val userDeviceRef = db.collection("users")
+                        .document(email)
+                        .collection("devices")
+                        .document(deviceId)
+
+                    userDeviceRef.set(esp32Data)
+                        .addOnSuccessListener {
+                            Log.d("Firestore", "Device added to user's devices collection: $deviceId")
+                            onResult(true)
+                        }
+                        .addOnFailureListener { e: Exception ->
+                            Log.w("Firestore", "Error adding device to user's devices collection", e)
+                            onResult(false)
+                        }
+                }
+                .addOnFailureListener { e: Exception ->
+                    Log.w("Firestore", "Error registering device", e)
+                    onResult(false)
+                }
+        }
+    }
+
+
+
+    @Composable
+    fun UpdateDeviceTokenScreen(onBack: () -> Unit) {
+        var deviceId by remember { mutableStateOf("") }
+        var token by remember { mutableStateOf("") }
+        var newToken by remember { mutableStateOf("") }
+        var updateStatus by remember { mutableStateOf("") }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CharcoalBlue)
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                IconButton(onClick = { onBack() }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = White
+                    )
+                }
+                Text(
+                    "Update Device Token",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontFamily = poppinsFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.LightGray,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(15.dp))
+                TextField(
+                    value = deviceId,
+                    onValueChange = { deviceId = it },
+                    label = { Text("Device ID", fontFamily = poppinsFontFamily) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = token,
+                    onValueChange = { token = it },
+                    label = { Text("Enter Current Token", fontFamily = poppinsFontFamily) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = newToken,
+                    onValueChange = { newToken = it },
+                    label = { Text("New Device Token", fontFamily = poppinsFontFamily) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        updateDeviceToken(deviceId, token, newToken) { success ->
+                            updateStatus =
+                                if (success) "Token updated successfully." else "Failed to update token."
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray)
+                ) {
+                    Text("Update Token", fontFamily = poppinsFontFamily, color = Black)
+                }
+                if (updateStatus.isNotEmpty()) {
+                    Text(
+                        text = updateStatus,
+                        color = if (updateStatus.contains("success")) Color.Green else Color.Red
+                    )
+                }
+            }
+        }
+    }
+
+    // Function to update only the token
+    private fun updateDeviceToken(
+        deviceId: String,
+        token: String,
+        newToken: String,
+        onResult: (Boolean) -> Unit
+    ) {
+        val deviceRef = db.collection("devices").document(deviceId)
+
+        deviceRef.get()
+            .addOnSuccessListener { document ->
+                if (document.exists()) {
+                    val currentData = document.data ?: hashMapOf<String, Any>()
+                    val updatedData = currentData.toMutableMap().apply {
+                        this["token"] = newToken
+                    }
+                    deviceRef.set(updatedData)
+                        .addOnSuccessListener {
+                            Log.d("Firestore", "Token updated successfully for device: $deviceId")
+                            onResult(true)
+                        }
+                        .addOnFailureListener { e ->
+                            Log.w("Firestore", "Error updating token", e)
+                            onResult(false)
+                        }
+                } else {
+                    Log.w("Firestore", "Device not found: $deviceId")
+                    onResult(false)
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.w("Firestore", "Error fetching device data", e)
+                onResult(false)
+            }
+    }
 
 
     @Composable
@@ -665,7 +962,7 @@ class MainActivity : ComponentActivity() {
                 .padding(16.dp), // Add padding to the Box if desired
             contentAlignment = Alignment.Center // Center the contents
         ) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     IconButton(onClick = { onBack() }) {
                         Icon(
@@ -712,109 +1009,7 @@ class MainActivity : ComponentActivity() {
     }
 
     //Verify or check credential to Firebase firestore
-    private fun verifyDeviceCredentials(
-        deviceId: String,
-        token: String,
-        onResult: (Boolean) -> Unit
-    ) {
-        val functions = FirebaseFunctions.getInstance()
 
-        // Call the Firebase function 'checkDeviceCredentials'
-        functions
-            .getHttpsCallable("checkDeviceCredentials") // Name of your Firebase Cloud Function
-            .call(hashMapOf("device_id" to deviceId, "token" to token))
-            .addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    val result = task.result?.data as? Map<*, *>
-                    val status = result?.get("status") as? String
-                    onResult(status == "success")
-                } else {
-                    Log.e("Firebase", "Error calling the function", task.exception)
-                    onResult(false)
-                }
-            }
-    }
-    //Registration User Interface(UI)
-    @Composable
-    fun RegisterEsp32Screen(onBack: () -> Unit) {
-        var deviceId by remember { mutableStateOf("") }
-        var token by remember { mutableStateOf("") }
-        var deviceName by remember { mutableStateOf("") }
-        var registrationStatus by remember { mutableStateOf("") }
-
-
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(CharcoalBlue)
-                .padding(16.dp), // Add padding to the Box if desired
-            contentAlignment = Alignment.Center // Center the contents
-        ) {
-            Column(modifier = Modifier.padding(16.dp)
-            ) {
-                IconButton(onClick = { onBack() }) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = White // Customize color if needed
-                    )
-                }
-                Text("Add New Device",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontFamily = poppinsFontFamily,
-                    fontWeight = FontWeight.Normal,
-                    color = (Color.LightGray),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                TextField(
-                    value = deviceId,
-                    onValueChange = { deviceId = it },
-                    label = { Text("Device ID", fontFamily = poppinsFontFamily) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                TextField(
-                    value = token,
-                    onValueChange = { token = it },
-                    label = { Text("Input Device Token", fontFamily = poppinsFontFamily) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                TextField(
-                    value = deviceName,
-                    onValueChange = { deviceName = it },
-                    label = { Text("Device Name", fontFamily = poppinsFontFamily) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(onClick = onClick@{
-                    verifyDeviceCredentials(deviceId, token) { isValid ->
-                        if (isValid) {
-                            registerEsp32Device(token, deviceId, deviceName) { success ->
-                                registrationStatus =
-                                    if (success) "Device registered successfully." else "Failed to register device."
-                            }
-                        } else {
-                            registrationStatus = "Invalid device ID or token."
-                        }
-                    }
-                },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.LightGray
-                    )
-                )
-
-                {
-                    Text("Register Device", fontFamily = poppinsFontFamily, color = Black)
-                }
-                if (registrationStatus.isNotEmpty()) {
-                    Text(
-                        text = registrationStatus,
-                        color = if (registrationStatus.contains("success")) Color.Green else Color.Red
-                    )
-                }
-            }
-        }
-    }
     //Rename Screen User Interface
     @Composable
     fun RenameEsp32Screen(onBack: () -> Unit) {
@@ -831,7 +1026,8 @@ class MainActivity : ComponentActivity() {
             contentAlignment = Alignment.Center // Center the contents
         ) {
 
-            Column(modifier = Modifier.padding(16.dp)
+            Column(
+                modifier = Modifier.padding(16.dp)
             ) {
                 IconButton(onClick = { onBack() }) {
                     Icon(
@@ -840,7 +1036,8 @@ class MainActivity : ComponentActivity() {
                         tint = White // Customize color if needed
                     )
                 }
-                Text("Rename Device",
+                Text(
+                    "Rename Device",
                     style = MaterialTheme.typography.headlineMedium,
                     fontFamily = poppinsFontFamily,
                     fontWeight = FontWeight.Normal,
@@ -863,28 +1060,34 @@ class MainActivity : ComponentActivity() {
                 TextField(
                     value = deviceName,
                     onValueChange = { deviceName = it },
-                    label = { Text("What name you will be assign?", fontFamily = poppinsFontFamily) }
+                    label = {
+                        Text(
+                            "What name you will be assign?",
+                            fontFamily = poppinsFontFamily
+                        )
+                    }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Button(onClick = onClick@{
-                    verifyDeviceCredentials(deviceId, token) { isValid ->
-                        if (isValid) {
-                            renameEsp32Device(token, deviceId, deviceName) { success ->
-                                registrationStatus =
-                                    if (success) "Device renamed successfully." else "Failed to rename device."
+                Button(
+                    onClick = onClick@{
+                        verifyDeviceCredentials(deviceId, token) { isValid ->
+                            if (isValid) {
+                                renameEsp32Device(token, deviceId, deviceName) { success ->
+                                    registrationStatus =
+                                        if (success) "Device renamed successfully." else "Failed to rename device."
+                                }
+                            } else {
+                                registrationStatus = "Invalid device ID or token."
                             }
-                        } else {
-                            registrationStatus = "Invalid device ID or token."
                         }
-                    }
-                },
+                    },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.LightGray
                     )
                 )
 
                 {
-                    Text("Rename Device",  fontFamily = poppinsFontFamily, color = Black)
+                    Text("Rename Device", fontFamily = poppinsFontFamily, color = Black)
                 }
                 if (registrationStatus.isNotEmpty()) {
                     Text(
@@ -895,6 +1098,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
     //Logic to rename device
     private fun renameEsp32Device(
         token: String,
@@ -925,146 +1129,132 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    //Logic to register device
-    private fun registerEsp32Device(
-        token: String,
-        deviceId: String,
-        deviceName: Any?,
-        onResult: (Boolean) -> Unit
-    ) {
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (!task.isSuccessful) {
-                Log.w("Firebase", "Fetching FCM token failed", task.exception)
-                return@addOnCompleteListener
-            }
 
-            val fcmToken = task.result
-            val esp32Data = hashMapOf(
-                "device_id" to deviceId,
-                "token" to token,
-                "registration_time" to System.currentTimeMillis(),
-                "status" to "active",
-                "fcmToken" to fcmToken,
-                "deviceName" to deviceName
-            )
-
-            db.collection("devices").document(deviceId).set(esp32Data)
-                .addOnSuccessListener {
-                    Log.d("Firestore", "Device registered successfully: $deviceId")
-                    onResult(true)
-                }
-                .addOnFailureListener { e: Exception ->
-                    Log.w("Firestore", "Error registering device", e)
-                    onResult(false)
-                }
-        }
-    }
-}
-//Image Item received by application
-@Composable
-fun DisplayNotificationImage(imageUrl: String?, deviceName: String?, onBack: () -> Unit, context: Context) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(CharcoalBlue)
-            .padding(16.dp), // Add padding to the Box if desired
-        contentAlignment = Alignment.Center // Center the contents
+    //Image Item received by application
+    @Composable
+    fun DisplayNotificationImage(
+        imageUrl: String?,
+        deviceName: String?,
+        onBack: () -> Unit,
+        context: Context
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = AbsoluteAlignment.Left,
-            verticalArrangement = Arrangement.Center
+                .background(CharcoalBlue)
+                .padding(16.dp), // Add padding to the Box if desired
+            contentAlignment = Alignment.Center // Center the contents
         ) {
-            IconButton(onClick = { onBack() }) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = White // Customize color if needed
-                )
-            }
-             Text("Notification",
-                 style = MaterialTheme.typography.headlineMedium,
-                 fontFamily = poppinsFontFamily,
-                 fontWeight = FontWeight.Normal,
-                 color = (Color.LightGray),
-                 textAlign = TextAlign.Center
-                 )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (deviceName != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = AbsoluteAlignment.Left,
+                verticalArrangement = Arrangement.Center
+            ) {
+                IconButton(onClick = { onBack() }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = White // Customize color if needed
+                    )
+                }
                 Text(
-                    text = deviceName,
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (imageUrl != null) {
-                val painter = rememberAsyncImagePainter(imageUrl)
-                Image(
-                    painter = painter,
-                    contentDescription = "Hurry! Your house is on fire!",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp),
-                    contentScale = ContentScale.Crop
+                    "Notification",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontFamily = poppinsFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = (Color.LightGray),
+                    textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Button(onClick = {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        downloadImageUsingMediaStore(context, imageUrl)
-                    }
-                }) {
-                    Text("Download", fontFamily = poppinsFontFamily)
+                if (deviceName != null) {
+                    Text(
+                        text = deviceName,
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = "Image not available", fontFamily = poppinsFontFamily, color = White)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (imageUrl != null) {
+                    val painter = rememberAsyncImagePainter(imageUrl)
+                    Image(
+                        painter = painter,
+                        contentDescription = "Hurry! Your house is on fire!",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(onClick = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            downloadImageUsingMediaStore(context, imageUrl)
+                        }
+                    }) {
+                        Text("Download", fontFamily = poppinsFontFamily)
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Image not available",
+                                fontFamily = poppinsFontFamily,
+                                color = White
+                            )
+                        }
                     }
                 }
             }
         }
     }
-}
 
-suspend fun downloadImageUsingMediaStore(context: Context, imageUrl: String) {
-    withContext(Dispatchers.IO) {
-        try {
-            // Download the image as a Bitmap
-            val bitmap = BitmapFactory.decodeStream(URL(imageUrl).openStream())
+    suspend fun downloadImageUsingMediaStore(context: Context, imageUrl: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                // Download the image as a Bitmap
+                val bitmap = BitmapFactory.decodeStream(URL(imageUrl).openStream())
 
-            // Prepare the content values
-            val contentValues = ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, "downloaded_image.jpg")
-                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/SafeHomeNotifier")
-            }
-
-            // Insert the image into MediaStore
-            val resolver = context.contentResolver
-            val imageUri: Uri? = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-
-            if (imageUri != null) {
-                resolver.openOutputStream(imageUri)?.use { outputStream: OutputStream ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                // Prepare the content values
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, "downloaded_image.jpg")
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    put(
+                        MediaStore.Images.Media.RELATIVE_PATH,
+                        Environment.DIRECTORY_PICTURES + "/SafeHomeNotifier"
+                    )
                 }
 
+                // Insert the image into MediaStore
+                val resolver = context.contentResolver
+                val imageUri: Uri? =
+                    resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+                if (imageUri != null) {
+                    resolver.openOutputStream(imageUri)?.use { outputStream: OutputStream ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Image downloaded successfully", Toast.LENGTH_SHORT)
+                            .show()
+                    }
+                }
+            } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Image downloaded successfully", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        "Failed to download image: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
-            }
-        } catch (e: Exception) {
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, "Failed to download image: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
