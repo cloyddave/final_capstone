@@ -478,23 +478,6 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    fun saveUserToFirestore(email: String) {
-        val db = FirebaseFirestore.getInstance()
-        val userRef = db.collection("users").document(email)
-
-        val userData = hashMapOf(
-            "email" to email,
-            "devices" to mutableListOf<String>() // List to store registered device IDs
-        )
-
-        userRef.set(userData)
-            .addOnSuccessListener {
-                Log.d("Firestore", "User data saved successfully")
-            }
-            .addOnFailureListener { e ->
-                Log.w("Firestore", "Error saving user data", e)
-            }
-    }
 
 
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -679,6 +662,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         )
+    }
+
+    fun saveUserToFirestore(email: String) {
+        val db = FirebaseFirestore.getInstance()
+        val userRef = db.collection("users").document(email)
+
+        val userData = hashMapOf(
+            "email" to email,
+            "devices" to mutableListOf<String>() // List to store registered device IDs
+        )
+
+        userRef.set(userData)
+            .addOnSuccessListener {
+                Log.d("Firestore", "User data saved successfully")
+            }
+            .addOnFailureListener { e ->
+                Log.w("Firestore", "Error saving user data", e)
+            }
     }
 
     private fun verifyDeviceCredentials(
