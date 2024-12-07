@@ -64,7 +64,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
-import androidx.lint.kotlin.metadata.Visibility
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -496,6 +495,19 @@ class MainActivity : ComponentActivity() {
         var changeToken by remember { mutableStateOf(false) }
         var expanded by remember { mutableStateOf(false) }
         val deviceName = intent.getStringExtra("deviceName")
+        var showMyDevices by remember { mutableStateOf(false) }
+
+        val userDevices = remember { mutableStateListOf<Map<String, String>>() }
+
+        LaunchedEffect(Unit) {
+            val userEmail = FirebaseAuth.getInstance().currentUser?.email
+            if (userEmail != null) {
+                fetchUserDevices(userEmail) { devices ->
+                    userDevices.addAll(devices)
+                }
+            }
+        }
+
 
         Scaffold(
             content = {
@@ -509,6 +521,13 @@ class MainActivity : ComponentActivity() {
                             historyImages = historyImages,
                             deviceName = deviceName,
                             onBack = { showHistory = false }
+                        )
+                    }
+
+                    showMyDevices -> {
+                        MyDevicesScreen(
+                            onBack = { showMyDevices = false },
+                            devices = userDevices
                         )
                     }
 
@@ -651,6 +670,18 @@ class MainActivity : ComponentActivity() {
                                 DropdownMenuItem(
                                     onClick = {
                                         expanded = false
+                                       showMyDevices = true
+                                    },
+                                    text = {
+                                        Text(
+                                            "My Devices",
+                                            fontFamily = poppinsFontFamily
+                                        )
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    onClick = {
+                                        expanded = false
                                         FirebaseAuth.getInstance().signOut()
                                         onNavigateToSignIn()
                                     },
@@ -663,6 +694,79 @@ class MainActivity : ComponentActivity() {
             }
         )
     }
+
+    @Composable
+    fun MyDevicesScreen(onBack: () -> Unit, devices: List<Map<String, String>>) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF364559))
+                .padding(16.dp)
+        ) {
+            Column {
+                IconButton(onClick = { onBack() }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
+                }
+
+                Text(
+                    text = "My Devices",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontFamily = poppinsFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.LightGray
+                )
+
+                LazyColumn {
+                    items(devices) { device ->
+                        DeviceCard(
+                            deviceId = device["device_id"] ?: "",
+                            deviceName = device["deviceName"] ?: "Unnamed Device"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun DeviceCard(deviceId: String, deviceName: String) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+                .clickable { /* Handle device click */ },
+            //backgroundColor = White
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Device ID: $deviceId", fontFamily = poppinsFontFamily)
+                Text("Device Name: $deviceName", fontFamily = poppinsFontFamily)
+            }
+        }
+    }
+
+    private fun fetchUserDevices(
+        email: String,
+        onResult: (List<Map<String, String>>) -> Unit
+    ) {
+        db.collection("users").document(email).collection("devices")
+            .get()
+            .addOnSuccessListener { result ->
+                val devices = result.map { document ->
+                    document.data.mapValues { it.value.toString() }
+                }
+                onResult(devices)
+            }
+            .addOnFailureListener { e ->
+                Log.w("Firestore", "Error fetching devices", e)
+                onResult(emptyList())
+            }
+    }
+
+
 
     fun saveUserToFirestore(email: String) {
         val db = FirebaseFirestore.getInstance()
@@ -710,6 +814,8 @@ class MainActivity : ComponentActivity() {
     fun RegisterEsp32Screen(onBack: () -> Unit) {
         var deviceId by remember { mutableStateOf("") }
         var token by remember { mutableStateOf("") }
+        var tokenError by remember { mutableStateOf(" ") }
+        var tokenVisible by remember { mutableStateOf(false) }
         var deviceName by remember { mutableStateOf("") }
         var registrationStatus by remember { mutableStateOf("") }
 
@@ -749,23 +855,52 @@ class MainActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = token,
-                    onValueChange = { token = it },
-                    label = { Text("Input Device Token", fontFamily = poppinsFontFamily) }
+                    onValueChange = {
+                        token = it
+                        tokenError = validateToken(it)
+                    },
+                    label = { Text("Input Device Token", fontFamily = poppinsFontFamily) },
+                    visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val image =
+                            if (tokenVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                        IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                            Icon(
+                                imageVector = image,
+                                contentDescription = "Toggle token visibility"
+                            )
+                        }
+                    }
                 )
+                if (tokenError.isNotEmpty()) {
+                    Text(
+                        tokenError,
+                        color = Color.Red,
+                        fontFamily = poppinsFontFamily,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = deviceName,
                     onValueChange = { deviceName = it },
                     label = { Text("Device Name", fontFamily = poppinsFontFamily) }
                 )
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
+                        if (tokenError.isEmpty()){
                         val userEmail = FirebaseAuth.getInstance().currentUser?.email
                         if (userEmail != null) {
                             verifyDeviceCredentials(deviceId, token) { isValid ->
                                 if (isValid) {
-                                    registerEsp32Device(userEmail, token, deviceId, deviceName) { success ->
+                                    registerEsp32Device(
+                                        userEmail,
+                                        token,
+                                        deviceId,
+                                        deviceName
+                                    ) { success ->
                                         registrationStatus =
                                             if (success) "Device registered successfully." else "Failed to register device."
                                     }
@@ -776,10 +911,10 @@ class MainActivity : ComponentActivity() {
                         } else {
                             registrationStatus = "User not logged in."
                         }
+                    }
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.LightGray
-                    )
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
+                    enabled = tokenError.isEmpty() // Disable button if error exists
                 ) {
                     Text("Register Device", fontFamily = poppinsFontFamily, color = Black)
                 }
@@ -790,6 +925,17 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    // Function to validate password complexity
+    private fun validateToken(token: String): String {
+        return when {
+            token.length < 8 -> "Token must be at least 8 characters long."
+            !token.any { it.isUpperCase() } -> "Token must include at least one uppercase letter."
+            !token.any { it.isDigit() } -> "Token must include at least one number."
+            !token.any { "!@#$%^&*()-_=+[{]}|;:'\",<.>/?".contains(it) } -> "Token must include at least one special character."
+            else -> ""
         }
     }
 
@@ -851,6 +997,8 @@ class MainActivity : ComponentActivity() {
     fun UpdateDeviceTokenScreen(onBack: () -> Unit) {
         var deviceId by remember { mutableStateOf("") }
         var token by remember { mutableStateOf("") }
+        var tokenVisible by remember { mutableStateOf(false) }
+        var tokenError by remember { mutableStateOf("") }
         var newToken by remember { mutableStateOf("") }
         var updateStatus by remember { mutableStateOf("") }
 
@@ -892,18 +1040,44 @@ class MainActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = newToken,
-                    onValueChange = { newToken = it },
-                    label = { Text("New Device Token", fontFamily = poppinsFontFamily) }
+                    onValueChange = {
+                        newToken = it
+                        tokenError = validateToken(it)
+                    },
+                    label = { Text("New Device Token", fontFamily = poppinsFontFamily) },
+                    visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val image =
+                            if (tokenVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                        IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                            Icon(
+                                imageVector = image,
+                                contentDescription = "Toggle token visibility"
+                            )
+                        }
+                    }
                 )
+
+                if (tokenError.isNotEmpty()) {
+                    Text(
+                        tokenError,
+                        color = Color.Red,
+                        fontFamily = poppinsFontFamily,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
-                        updateDeviceToken(deviceId, token, newToken) { success ->
+                        if (tokenError.isEmpty()){
+                        updateDeviceToken(deviceId, newToken) { success ->
                             updateStatus =
                                 if (success) "Token updated successfully." else "Failed to update token."
                         }
+                            }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
+                    enabled = tokenError.isEmpty() // Disable button if error exists
                 ) {
                     Text("Update Token", fontFamily = poppinsFontFamily, color = Black)
                 }
@@ -920,7 +1094,6 @@ class MainActivity : ComponentActivity() {
     // Function to update only the token
     private fun updateDeviceToken(
         deviceId: String,
-        token: String,
         newToken: String,
         onResult: (Boolean) -> Unit
     ) {
@@ -1016,6 +1189,7 @@ class MainActivity : ComponentActivity() {
     fun RenameEsp32Screen(onBack: () -> Unit) {
         var deviceId by remember { mutableStateOf("") }
         var token by remember { mutableStateOf("") }
+        var tokenError by remember { mutableStateOf("") }
         var deviceName by remember { mutableStateOf("") }
         var registrationStatus by remember { mutableStateOf("") }
 
@@ -1054,7 +1228,10 @@ class MainActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(8.dp))
                 TextField(
                     value = token,
-                    onValueChange = { token = it },
+                    onValueChange = {
+                        token = it
+                        tokenError = validateToken(it)
+                    },
                     label = { Text("Input Device Token", fontFamily = poppinsFontFamily) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
