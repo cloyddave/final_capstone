@@ -71,7 +71,9 @@ import com.group5.safehomenotifier.ui.theme.CharcoalBlue
 import com.group5.safehomenotifier.ui.theme.poppinsFontFamily
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
 class MainActivity : ComponentActivity() {
@@ -88,6 +90,7 @@ class MainActivity : ComponentActivity() {
         val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
         sharedPreferences.getBoolean("hasStarted", false)
         sharedPreferences.getBoolean("isRegistered", false)
+
 
 
         val imageUrl = intent.getStringExtra("imageUrl")
@@ -125,11 +128,21 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         navigateToSignUp = {
-                            navController.navigate("sign_up") // Navigate to sign-up screen
+                            navController.navigate("sign_up")
+                            // Navigate to sign-up screen
+                        },
+                        navigateToForgotPassword = {
+                            navController.navigate("forgot_password")
                         }
                     )
                 }
-
+                       composable("forgot_password"){
+                           ForgotPasswordScreen(
+                               onPasswordReset = {
+                                   navController.popBackStack()
+                               }
+                           )
+                       }
                 // Sign-Up Screen
                 composable("sign_up") {
                     SignUpScreen(
@@ -157,7 +170,7 @@ class MainActivity : ComponentActivity() {
                                 popUpTo("main_screen") { inclusive = true }
                             }
                         }
-                    )
+                    )       
                 }
             }
         }
@@ -186,6 +199,31 @@ class MainActivity : ComponentActivity() {
     private fun isDeviceRegistered(): Boolean {
         val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
         return sharedPreferences.getBoolean("isRegistered", false)
+    }
+
+    fun getImagesFromPrefs(context: Context): List<String> {
+        val prefs = context.getSharedPreferences("ImagePrefs", Context.MODE_PRIVATE)
+        val savedImages = prefs.getString("imageHistory", "") ?: ""
+
+        // Return as list (filter out empty strings)
+        return if (savedImages.isNotEmpty()) savedImages.split(",") else emptyList()
+    }
+
+    fun saveImageToPrefs(context: Context, imageUrl: String) {
+        val prefs = context.getSharedPreferences("ImagePrefs", Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+
+        // Get existing images and append new one
+        val existingImages = prefs.getString("imageHistory", "") ?: ""
+        val newImages = if (existingImages.isNotEmpty()) {
+            "$existingImages,$imageUrl"
+        } else {
+            imageUrl
+        }
+
+        // Save to SharedPreferences
+        editor.putString("imageHistory", newImages)
+        editor.apply()
     }
 
 
@@ -349,7 +387,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun SignInScreen(onSignInSuccess: () -> Unit, navigateToSignUp: () -> Unit) {
+    fun SignInScreen(onSignInSuccess: () -> Unit, navigateToSignUp: () -> Unit, navigateToForgotPassword:() -> Unit) {
         var email by remember { mutableStateOf("") }
         var passwordVisible by remember { mutableStateOf(false) } // State for password visibility
         var passwordError by remember { mutableStateOf("") } // State for error message
@@ -411,6 +449,18 @@ class MainActivity : ComponentActivity() {
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                ClickableText(
+                    text = AnnotatedString("Forgot Password?"),
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = Color.Cyan,
+                        textDecoration = TextDecoration.Underline
+                    ),
+                    onClick = {
+                        navigateToForgotPassword()
+                    }
+                )
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
@@ -476,6 +526,73 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Composable
+    fun ForgotPasswordScreen(onPasswordReset: () -> Unit) {
+        var email by remember { mutableStateOf("") }
+        val auth = FirebaseAuth.getInstance()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CharcoalBlue)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                "Forgot Password",
+                style = MaterialTheme.typography.headlineLarge,
+                fontFamily = poppinsFontFamily,
+                fontWeight = FontWeight.Normal,
+                color = Color.LightGray,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            TextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Enter your email", fontFamily = poppinsFontFamily) }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    sendPasswordResetEmail(auth, email)
+                    onPasswordReset()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
+            ) {
+                Text("Send Reset Email", fontFamily = poppinsFontFamily, color = Black)
+            }
+        }
+    }
+
+
+    private fun sendPasswordResetEmail(auth: FirebaseAuth, email: String) {
+        if (email.isNotEmpty()) {
+            auth.sendPasswordResetEmail(email)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        Toast.makeText(
+                            auth.app.applicationContext,
+                            "Password reset email sent.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            auth.app.applicationContext,
+                            "Error: ${task.exception?.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+        } else {
+            Toast.makeText(
+                auth.app.applicationContext,
+                "Please enter your email to reset password.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
 
 
 
@@ -495,10 +612,10 @@ class MainActivity : ComponentActivity() {
         var changeToken by remember { mutableStateOf(false) }
         var expanded by remember { mutableStateOf(false) }
         val deviceName = intent.getStringExtra("deviceName")
-        var showMyDevices by remember { mutableStateOf(false) }
+    var showMyDevices by remember { mutableStateOf(false) }             
 
         val userDevices = remember { mutableStateListOf<Map<String, String>>() }
-
+                
         LaunchedEffect(Unit) {
             val userEmail = FirebaseAuth.getInstance().currentUser?.email
             if (userEmail != null) {
@@ -1129,6 +1246,15 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun HistoryScreen(historyImages: List<String>, deviceName: String?, onBack: () -> Unit) {
+
+        var imageList by remember { mutableStateOf(listOf<String>()) }
+        val context = LocalContext.current
+
+        // Load images on screen entry
+        LaunchedEffect(Unit) {
+            imageList = getImagesFromPrefs(context)
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1160,27 +1286,40 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.padding(16.dp)
                         )
                     }
+
                     LazyColumn {
                         items(historyImages) { imageUrl ->
                             val painter = rememberAsyncImagePainter(imageUrl)
-                            Image(
-                                painter = painter,
-                                contentDescription = "Historical image",
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(300.dp)
-                                    .padding(8.dp),
-                                contentScale = ContentScale.Crop
-                            )
+                            val currentDateTime = remember {
+                                SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                            }
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Image(
+                                    painter = painter,
+                                    contentDescription = "Historical image",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(300.dp),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Text(
+                                    text = "Viewed at: $currentDateTime",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
-
                 }
             }
         }
     }
+
 
     //Verify or check credential to Firebase firestore
 
@@ -1316,6 +1455,10 @@ class MainActivity : ComponentActivity() {
         onBack: () -> Unit,
         context: Context
     ) {
+        val currentDateTime = remember {
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1367,6 +1510,14 @@ class MainActivity : ComponentActivity() {
                             .height(300.dp),
                         contentScale = ContentScale.Crop
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Received at: $currentDateTime",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Button(onClick = {
@@ -1434,6 +1585,25 @@ class MainActivity : ComponentActivity() {
                     ).show()
                 }
             }
+        }
+    }
+
+    companion object {
+        fun saveImageToPrefs(context: Context, imageUrl: String) {
+            val prefs = context.getSharedPreferences("ImagePrefs", Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+
+            // Get existing images and append new one
+            val existingImages = prefs.getString("imageHistory", "") ?: ""
+            val newImages = if (existingImages.isNotEmpty()) {
+                "$existingImages,$imageUrl"
+            } else {
+                imageUrl
+            }
+
+            // Save to SharedPreferences
+            editor.putString("imageHistory", newImages)
+            editor.apply()
         }
     }
 }

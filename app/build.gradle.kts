@@ -51,7 +51,8 @@ android {
 dependencies {
 
         implementation ("androidx.navigation:navigation-compose:2.8.4")
-        implementation("androidx.compose.material:material-icons-extended:1.5.1")
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+    implementation("androidx.compose.material:material-icons-extended:1.5.1")
     // implementation("androidx.credentials:credentials:1.5.0-beta01")
        // implementation("androidx.credentials:credentials-play-services-auth:1.5.0-beta01")
         implementation("androidx.datastore:datastore-preferences:1.0.0")
