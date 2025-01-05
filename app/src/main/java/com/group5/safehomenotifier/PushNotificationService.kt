@@ -1,15 +1,8 @@
 package com.group5.safehomenotifier
 
-import android.content.Context
 import android.content.Intent
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-//import com.group5.safehomenotifier.saveImageToPrefs  // Import the function
-
-import android.content.SharedPreferences
-
-
-import com.google.firebase.messaging.remoteMessage
 import com.group5.safehomenotifier.MainActivity.Companion.saveImageToPrefs
 
 class PushNotificationService: FirebaseMessagingService() {
