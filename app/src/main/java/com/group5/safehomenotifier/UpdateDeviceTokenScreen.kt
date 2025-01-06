@@ -45,7 +45,7 @@ fun UpdateDeviceTokenScreen(onBack: () -> Unit, deviceManager: DeviceManager) {
     var tokenError by remember { mutableStateOf("") }
     var newToken by remember { mutableStateOf("") }
     var updateStatus by remember { mutableStateOf("") }
-    var uiState by remember { mutableStateOf(UIState()) }
+    //var uiState by remember { mutableStateOf(UIState()) }
 
     Box(
         modifier = Modifier
@@ -115,11 +115,10 @@ fun UpdateDeviceTokenScreen(onBack: () -> Unit, deviceManager: DeviceManager) {
             Button(
                 onClick = {
                     if (tokenError.isEmpty()) {
-                        // Create the device object with deviceId, current token, and deviceName
-                        Device(deviceId, token, "Default Device Name") // You can replace this with dynamic name fetching logic if needed
-                        deviceManager.updateDeviceToken(deviceId, newToken) { success ->
+                        // Call the updateDeviceToken function with entered token and new token
+                        deviceManager.updateDeviceToken(deviceId, token, newToken) { success ->
                             updateStatus =
-                                if (success) "Token updated successfully." else "Failed to update token."
+                                if (success) "Token updated successfully." else "Invalid device ID or token."
                         }
                     }
                 },
@@ -128,6 +127,7 @@ fun UpdateDeviceTokenScreen(onBack: () -> Unit, deviceManager: DeviceManager) {
             ) {
                 Text("Update Token", fontFamily = poppinsFontFamily, color = Black)
             }
+
             if (updateStatus.isNotEmpty()) {
                 Text(
                     text = updateStatus,

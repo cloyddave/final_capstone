@@ -27,9 +27,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import coil.compose.rememberAsyncImagePainter
-import com.google.firebase.messaging.FirebaseMessaging
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import com.google.firebase.functions.FirebaseFunctions
 import androidx.compose.ui.graphics.Color
 import android.content.Context
@@ -41,16 +39,13 @@ import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color.Companion.Black
 import androidx.compose.ui.graphics.Color.Companion.White
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.TextAlign
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
@@ -60,24 +55,18 @@ import kotlinx.coroutines.withContext
 import java.io.OutputStream
 import java.net.URL
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withStyle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.group5.safehomenotifier.ui.theme.CharcoalBlue
 import com.group5.safehomenotifier.ui.theme.poppinsFontFamily
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.navigation.NavController
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 
 class MainActivity : ComponentActivity() {
+    private var viewModel = AuthViewModel()
     private val functions = FirebaseFunctions.getInstance()
     private val db = FirebaseFirestore.getInstance()
     private var deviceManager = DeviceManager(db, functions)
@@ -107,28 +96,18 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
 
         setContent {
-                    RenameEsp32Screen(
-                        onBack = { finish() },  // Handle back navigation (finish the activity in this case)
-                        deviceManager = deviceManager
-                    )
-            UpdateDeviceTokenScreen(
-                onBack = { finish() },  // Handle back navigation (finish the activity in this case)
-                deviceManager = deviceManager
+            AppNavigation(
+                imageUrl = imageUrl
             )
-            RegisterEsp32Screen(
-                onBack = { finish() },  // Handle back navigation (finish the activity in this case)
-                deviceManager = deviceManager
-            )
-            AppNavigation(imageUrl = imageUrl)
-
         }
 
 
     }
-        
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun AppNavigation(imageUrl: String?){
+
         val navController = rememberNavController()
         val auth = FirebaseAuth.getInstance()
         val isUserLoggedIn = remember { mutableStateOf(auth.currentUser != null) }
@@ -161,12 +140,18 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
+
             composable("forgot_password"){
-                ForgotPasswordScreen(
-                    onPasswordReset = {
-                        navController.popBackStack()
-                    }
-                )
+               ForgotPasswordScreen(
+                   onPasswordReset = {
+                       navController.navigate("sign_in") {
+                           popUpTo("forgot_password") { inclusive = true }
+                       }
+                   },
+                   navigateToSignIn = {
+                       navController.navigate("sign_in")
+                   }
+               )
             }
             // Sign-Up Screen
             composable("sign_up") {
@@ -184,10 +169,10 @@ class MainActivity : ComponentActivity() {
             }
 
 
+
             // Main Screen
             composable("main_screen") {
                 SafeHomeNotifierApp(
-                    navController = navController,
                     historyImages = historyImages,
                     imageUrl = imageUrl,
                     onNavigateToSignIn = {
@@ -198,437 +183,14 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
-            composable("register_device") {
-                RegisterEsp32Screen(onBack = { navController.popBackStack() }, deviceManager = DeviceManager(
-                    db = db,
-                    functions = functions
-                ))
-            }
         }
     }
-
-    private fun setStarted() {
-        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
-        with(sharedPreferences.edit()) {
-            putBoolean("hasStarted", true)
-            apply()
-        }
-    }
-
-
-    private fun setRegistrationStatus(isRegistered: Boolean) {
-        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
-        with(sharedPreferences.edit()) {
-            putBoolean("isRegistered", isRegistered)
-            apply()
-        }
-    }
-
-    private fun isDeviceRegistered(): Boolean {
-        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
-        return sharedPreferences.getBoolean("isRegistered", false)
-    }
-
-    fun getImagesFromPrefs(context: Context): List<String> {
-        val prefs = context.getSharedPreferences("ImagePrefs", MODE_PRIVATE)
-        val savedImages = prefs.getString("imageHistory", "") ?: ""
-
-        // Return as list (filter out empty strings)
-        return if (savedImages.isNotEmpty()) savedImages.split(",") else emptyList()
-    }
-
-    fun saveImageToPrefs(context: Context, imageUrl: String) {
-        val prefs = context.getSharedPreferences("ImagePrefs", MODE_PRIVATE)
-        val editor = prefs.edit()
-
-        // Get existing images and append new one
-        val existingImages = prefs.getString("imageHistory", "") ?: ""
-        val newImages = if (existingImages.isNotEmpty()) {
-            "$existingImages,$imageUrl"
-        } else {
-            imageUrl
-        }
-
-        // Save to SharedPreferences
-        editor.putString("imageHistory", newImages)
-        editor.apply()
-    }
-
-
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val hasPermission = ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-
-            if (!hasPermission) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    0
-                )
-            }
-        }
-    }
-
-    @Composable
-    fun SignUpScreen(onNavigateToSignIn: () -> Unit, navigateToSignIn: () -> Unit) {
-        var email by remember { mutableStateOf("") }
-        var password by remember { mutableStateOf("") }
-        var passwordError by remember { mutableStateOf("") } // State for error message
-        var passwordVisible by remember { mutableStateOf(false) } // State for password visibility
-        val auth = FirebaseAuth.getInstance()
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(CharcoalBlue)
-                .padding(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(CharcoalBlue)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    "Sign Up",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontFamily = poppinsFontFamily,
-                    fontWeight = FontWeight.Normal,
-                    color = Color.LightGray,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(15.dp))
-                TextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email", fontFamily = poppinsFontFamily) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                TextField(
-                    value = password,
-                    onValueChange = {
-                        password = it
-                        passwordError = validatePassword(it) // Update error state
-                    },
-                    label = { Text("Password", fontFamily = poppinsFontFamily) },
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        val image =
-                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                imageVector = image,
-                                contentDescription = "Toggle password visibility"
-                            )
-                        }
-                    }
-                )
-                // Display password error
-                if (passwordError.isNotEmpty()) {
-                    Text(
-                        passwordError,
-                        color = Color.Red,
-                        fontFamily = poppinsFontFamily,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(
-                    onClick = {
-                        if (passwordError.isEmpty()) { // Proceed only if password is valid
-                            auth.createUserWithEmailAndPassword(email, password)
-                                .addOnCompleteListener { task ->
-                                    if (task.isSuccessful) {
-                                        val user = auth.currentUser
-                                        saveUserToFirestore(user?.email!!)
-                                        user.sendEmailVerification()
-                                            .addOnCompleteListener { emailTask ->
-                                                if (emailTask.isSuccessful) {
-                                                    Toast.makeText(
-                                                        auth.app.applicationContext,
-                                                        "Sign-up successful! Please check your email to verify your account before logging in.",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                    onNavigateToSignIn()
-                                                } else {
-                                                    Toast.makeText(
-                                                        auth.app.applicationContext,
-                                                        "Error sending verification email: ${emailTask.exception?.message}",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                            }
-                                    } else {
-                                        Toast.makeText(
-                                            auth.app.applicationContext,
-                                            "Sign-up failed: ${task.exception?.message}",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
-                    enabled = passwordError.isEmpty() // Disable button if error exists
-                ) {
-                    Text("Sign Up", fontFamily = poppinsFontFamily, color = Black)
-                }
-
-                ClickableText(
-                    text = AnnotatedString.Builder().apply {
-                        append("Already have an account?")
-                        withStyle(
-                            style = SpanStyle(
-                                color = Color.Cyan,
-                                textDecoration = TextDecoration.Underline
-                            )
-                        ) {
-                            append(" Sign In")
-                        }
-                    }.toAnnotatedString(),
-                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.LightGray),
-                    onClick = { offset ->
-                        if (offset in "Already have an account? ".length until "Already have an account? Sign In".length) {
-                            navigateToSignIn()
-                        }
-                    },
-                    modifier = Modifier.padding(8.dp)
-                )
-            }
-        }
-    }
-
-    // Function to validate password complexity
-    private fun validatePassword(password: String): String {
-        return when {
-            password.length < 8 -> "Password must be at least 8 characters long."
-            !password.any { it.isUpperCase() } -> "Password must include at least one uppercase letter."
-            !password.any { it.isDigit() } -> "Password must include at least one number."
-            !password.any { "!@#$%^&*()-_=+[{]}|;:'\",<.>/?".contains(it) } -> "Password must include at least one special character."
-            else -> ""
-        }
-    }
-
-    @Composable
-    fun SignInScreen(onSignInSuccess: () -> Unit, navigateToSignUp: () -> Unit, navigateToForgotPassword:() -> Unit) {
-        var email by remember { mutableStateOf("") }
-        var passwordVisible by remember { mutableStateOf(false) } // State for password visibility
-        var passwordError by remember { mutableStateOf("") } // State for error message
-        var password by remember { mutableStateOf("") }
-        val auth = FirebaseAuth.getInstance()
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(CharcoalBlue)
-                .padding(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(CharcoalBlue)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    "Sign In",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontFamily = poppinsFontFamily,
-                    fontWeight = FontWeight.Normal,
-                    color = Color.LightGray,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(15.dp))
-                TextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email", fontFamily = poppinsFontFamily) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                TextField(
-                    value = password,
-                    onValueChange = {
-                        password = it
-                        passwordError = validatePassword(it) // Update error state
-                    },
-                    label = { Text("Password", fontFamily = poppinsFontFamily) },
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        val image =
-                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                imageVector = image,
-                                contentDescription = "Toggle password visibility"
-                            )
-                        }
-                    }
-                )
-                if (passwordError.isNotEmpty()) {
-                    Text(
-                        passwordError,
-                        color = Color.Red,
-                        fontFamily = poppinsFontFamily,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                ClickableText(
-                    text = AnnotatedString("Forgot Password?"),
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = Color.Cyan,
-                        textDecoration = TextDecoration.Underline
-                    ),
-                    onClick = {
-                        navigateToForgotPassword()
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(
-                    onClick = {
-                        if (passwordError.isEmpty()) {
-                            auth.signInWithEmailAndPassword(email, password)
-                                .addOnCompleteListener { task ->
-                                    if (task.isSuccessful) {
-                                        val user = auth.currentUser
-                                        if (user?.isEmailVerified == true) {
-                                            saveUserToFirestore(user.email!!)
-                                            Toast.makeText(
-                                                auth.app.applicationContext,
-                                                "Sign-In Successfully",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                            onSignInSuccess() // Proceed to the main screen
-                                        } else {
-                                            Toast.makeText(
-                                                auth.app.applicationContext,
-                                                "Please verify your email before signing in.",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    } else {
-                                        Toast.makeText(
-                                            auth.app.applicationContext,
-                                            "Sign-in failed: ${task.exception?.message}",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
-                    enabled = passwordError.isEmpty() // Disable button if error exists
-                ) {
-                    Text("Sign In", fontFamily = poppinsFontFamily, color = Black)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-
-                ClickableText(
-                    text = AnnotatedString.Builder().apply {
-                        append("Didn't already sign in? ")
-                        withStyle(
-                            style = SpanStyle(
-                                color = Color.Cyan, // Highlight color for "Sign Up"
-                                textDecoration = TextDecoration.Underline // Underline for "Sign Up"
-                            )
-                        ) {
-                            append("Sign Up")
-                        }
-                    }.toAnnotatedString(),
-                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.LightGray),
-                    onClick = { offset ->
-                        if (offset in "Didn't already sign in? ".length until "Didn't already sign in? Sign Up".length) {
-                            navigateToSignUp()
-                        }
-                    },
-                    modifier = Modifier.padding(8.dp)
-                )
-            }
-        }
-    }
-
-    @Composable
-    fun ForgotPasswordScreen(onPasswordReset: () -> Unit) {
-        var email by remember { mutableStateOf("") }
-        val auth = FirebaseAuth.getInstance()
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(CharcoalBlue)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                "Forgot Password",
-                style = MaterialTheme.typography.headlineLarge,
-                fontFamily = poppinsFontFamily,
-                fontWeight = FontWeight.Normal,
-                color = Color.LightGray,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            TextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Enter your email", fontFamily = poppinsFontFamily) }
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = {
-                    sendPasswordResetEmail(auth, email)
-                    onPasswordReset()
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
-            ) {
-                Text("Send Reset Email", fontFamily = poppinsFontFamily, color = Black)
-            }
-        }
-    }
-
-
-    private fun sendPasswordResetEmail(auth: FirebaseAuth, email: String) {
-        if (email.isNotEmpty()) {
-            auth.sendPasswordResetEmail(email)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Toast.makeText(
-                            auth.app.applicationContext,
-                            "Password reset email sent.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        Toast.makeText(
-                            auth.app.applicationContext,
-                            "Error: ${task.exception?.message}",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-        } else {
-            Toast.makeText(
-                auth.app.applicationContext,
-                "Please enter your email to reset password.",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
-
-
 
 
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @ExperimentalMaterial3Api
     @Composable
     fun SafeHomeNotifierApp(
-        navController:NavController,
         historyImages: MutableList<String>,
         imageUrl: String?,
         onNavigateToSignIn: () -> Unit,
@@ -778,7 +340,9 @@ class MainActivity : ComponentActivity() {
                                     contentDescription = "Add Icon",
                                     modifier = Modifier
                                         .size(40.dp)
-                                        .clickable { isRegistering = true },
+                                        .clickable {
+                                            isRegistering = true
+                                        },
                                     tint = White
                                 )
 
@@ -851,6 +415,73 @@ class MainActivity : ComponentActivity() {
             }
         )
     }
+
+
+    private fun setStarted() {
+        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
+        with(sharedPreferences.edit()) {
+            putBoolean("hasStarted", true)
+            apply()
+        }
+    }
+
+
+    private fun setRegistrationStatus(isRegistered: Boolean) {
+        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
+        with(sharedPreferences.edit()) {
+            putBoolean("isRegistered", isRegistered)
+            apply()
+        }
+    }
+
+    private fun isDeviceRegistered(): Boolean {
+        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
+        return sharedPreferences.getBoolean("isRegistered", false)
+    }
+
+    fun getImagesFromPrefs(context: Context): List<String> {
+        val prefs = context.getSharedPreferences("ImagePrefs", MODE_PRIVATE)
+        val savedImages = prefs.getString("imageHistory", "") ?: ""
+
+        // Return as list (filter out empty strings)
+        return if (savedImages.isNotEmpty()) savedImages.split(",") else emptyList()
+    }
+
+    fun saveImageToPrefs(context: Context, imageUrl: String) {
+        val prefs = context.getSharedPreferences("ImagePrefs", MODE_PRIVATE)
+        val editor = prefs.edit()
+
+        // Get existing images and append new one
+        val existingImages = prefs.getString("imageHistory", "") ?: ""
+        val newImages = if (existingImages.isNotEmpty()) {
+            "$existingImages,$imageUrl"
+        } else {
+            imageUrl
+        }
+
+        // Save to SharedPreferences
+        editor.putString("imageHistory", newImages)
+        editor.apply()
+    }
+
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasPermission) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    0
+                )
+            }
+        }
+    }
+
 
     @Composable
     fun MyDevicesScreen(onBack: () -> Unit, devices: List<Map<String, String>>) {
@@ -1182,5 +813,6 @@ class MainActivity : ComponentActivity() {
             editor.putString("imageHistory", newImages)
             editor.apply()
         }
+
     }
 }       

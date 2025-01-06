@@ -96,25 +96,34 @@ class DeviceManager(private val db: FirebaseFirestore, private val functions: Fi
     }
 
 
-    fun updateDeviceToken(deviceId: String, newToken: String, onResult: (Boolean) -> Unit) {
+    fun updateDeviceToken(deviceId: String, enteredToken: String, newToken: String, onResult: (Boolean) -> Unit) {
         val deviceRef = db.collection("devices").document(deviceId)
 
         deviceRef.get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
                     val currentData = document.data ?: hashMapOf<String, Any>()
-                    val updatedData = currentData.toMutableMap().apply {
-                        this["token"] = newToken
+                    val storedToken = currentData["token"] as? String
+
+                    if (storedToken != null && storedToken == enteredToken) {
+                        val updatedData = currentData.toMutableMap().apply {
+                            this["token"] = newToken
+                        }
+
+                        deviceRef.set(updatedData)
+                            .addOnSuccessListener {
+                                Log.d("Firestore", "Token updated successfully for device: $deviceId")
+                                onResult(true)
+                            }
+                            .addOnFailureListener { e ->
+                                Log.w("Firestore", "Error updating token", e)
+                                onResult(false)
+                            }
+                    } else {
+                        // The entered token does not match the stored token
+                        Log.w("Firestore", "Incorrect current token for device: $deviceId")
+                        onResult(false)
                     }
-                    deviceRef.set(updatedData)
-                        .addOnSuccessListener {
-                            Log.d("Firestore", "Token updated successfully for device: $deviceId")
-                            onResult(true)
-                        }
-                        .addOnFailureListener { e ->
-                            Log.w("Firestore", "Error updating token", e)
-                            onResult(false)
-                        }
                 } else {
                     Log.w("Firestore", "Device not found: $deviceId")
                     onResult(false)
@@ -125,6 +134,5 @@ class DeviceManager(private val db: FirebaseFirestore, private val functions: Fi
                 onResult(false)
             }
     }
+
 }
-
-
