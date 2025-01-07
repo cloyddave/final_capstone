@@ -24,7 +24,7 @@ class DeviceManager(private val db: FirebaseFirestore, private val functions: Fi
             }
     }
 
-    fun registerDevice(userEmail: String, device: Device, onResult: (Boolean) -> Unit) {
+    fun registerDevice(email: String, token: String, deviceId:String, deviceName: Any?, onResult: (Boolean) -> Unit) {
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) {
                 Log.w("Firebase", "Fetching FCM token failed", task.exception)
@@ -33,25 +33,25 @@ class DeviceManager(private val db: FirebaseFirestore, private val functions: Fi
 
             val fcmToken = task.result
             val esp32Data = hashMapOf(
-                "device_id" to device.deviceId,
-                "token" to device.token,
+                "device_id" to deviceId,
+                "token" to token,
                 "registration_time" to System.currentTimeMillis(),
                 "status" to "active",
                 "fcmToken" to fcmToken,
-                "deviceName" to device.deviceName
+                "deviceName" to deviceName
             )
 
-            db.collection("devices").document(device.deviceId).set(esp32Data)
+            db.collection("devices").document(deviceId).set(esp32Data)
                 .addOnSuccessListener {
-                    Log.d("Firestore", "Device registered successfully: ${device.deviceId}")
+                    Log.d("Firestore", "Device registered successfully: ${deviceId}")
                     val userDeviceRef = db.collection("users")
-                        .document(userEmail)
+                        .document(email)
                         .collection("devices")
-                        .document(device.deviceId)
+                        .document(deviceId)
 
                     userDeviceRef.set(esp32Data)
                         .addOnSuccessListener {
-                            Log.d("Firestore", "Device added to user's devices collection: ${device.deviceId}")
+                            Log.d("Firestore", "Device added to user's devices collection: ${deviceId}")
                             onResult(true)
                         }
                         .addOnFailureListener { e ->
@@ -69,7 +69,7 @@ class DeviceManager(private val db: FirebaseFirestore, private val functions: Fi
     fun renameEsp32Device(
         token: String,
         deviceId: String,
-        deviceName: String,
+        deviceName: Any?,
         onResult: (Boolean) -> Unit
     ) {
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
@@ -96,16 +96,16 @@ class DeviceManager(private val db: FirebaseFirestore, private val functions: Fi
     }
 
 
-    fun updateDeviceToken(deviceId: String, enteredToken: String, newToken: String, onResult: (Boolean) -> Unit) {
+    fun updateDeviceToken(deviceId: String, newToken: String, onResult: (Boolean) -> Unit) {
         val deviceRef = db.collection("devices").document(deviceId)
 
         deviceRef.get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
                     val currentData = document.data ?: hashMapOf<String, Any>()
-                    val storedToken = currentData["token"] as? String
+                  //  val storedToken = currentData["token"] as? String
 
-                    if (storedToken != null && storedToken == enteredToken) {
+                   // if (storedToken != null && storedToken == enteredToken) {
                         val updatedData = currentData.toMutableMap().apply {
                             this["token"] = newToken
                         }
@@ -119,16 +119,13 @@ class DeviceManager(private val db: FirebaseFirestore, private val functions: Fi
                                 Log.w("Firestore", "Error updating token", e)
                                 onResult(false)
                             }
-                    } else {
+                    }
+                    else {
                         // The entered token does not match the stored token
                         Log.w("Firestore", "Incorrect current token for device: $deviceId")
                         onResult(false)
                     }
-                } else {
-                    Log.w("Firestore", "Device not found: $deviceId")
-                    onResult(false)
                 }
-            }
             .addOnFailureListener { e ->
                 Log.w("Firestore", "Error fetching device data", e)
                 onResult(false)

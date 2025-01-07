@@ -66,7 +66,6 @@ import java.util.Locale
 
 
 class MainActivity : ComponentActivity() {
-    private var viewModel = AuthViewModel()
     private val functions = FirebaseFunctions.getInstance()
     private val db = FirebaseFirestore.getInstance()
     private var deviceManager = DeviceManager(db, functions)
@@ -142,16 +141,16 @@ class MainActivity : ComponentActivity() {
             }
 
             composable("forgot_password"){
-               ForgotPasswordScreen(
-                   onPasswordReset = {
-                       navController.navigate("sign_in") {
-                           popUpTo("forgot_password") { inclusive = true }
-                       }
-                   },
-                   navigateToSignIn = {
-                       navController.navigate("sign_in")
-                   }
-               )
+                ForgotPasswordScreen(
+                    onPasswordReset = {
+                        navController.navigate("sign_in") {
+                            popUpTo("forgot_password") { inclusive = true }
+                        }
+                    },
+                    navigateToSignIn = {
+                        navController.navigate("sign_in")
+                    }
+                )
             }
             // Sign-Up Screen
             composable("sign_up") {
@@ -815,4 +814,4 @@ class MainActivity : ComponentActivity() {
         }
 
     }
-}       
+}

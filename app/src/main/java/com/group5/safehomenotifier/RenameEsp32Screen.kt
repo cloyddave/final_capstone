@@ -124,5 +124,3 @@ fun RenameEsp32Screen(onBack: () -> Unit, deviceManager: DeviceManager) {
         }
     }
 }
-
-

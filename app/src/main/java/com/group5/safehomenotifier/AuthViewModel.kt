@@ -1,10 +1,12 @@
 package com.group5.safehomenotifier
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -59,6 +61,7 @@ class AuthViewModel : ViewModel() {
                     if (task.isSuccessful) {
                         val user = auth.currentUser
                         if (user?.isEmailVerified == true) {
+                            saveUserToFirestore(user.email!!)
                             _uiStates.value = UiState.Success("Welcome back!")
                             onSuccess()
                         } else {
@@ -71,6 +74,24 @@ class AuthViewModel : ViewModel() {
                     }
                 }
         }
+    }
+
+    fun saveUserToFirestore(email: String) {
+        val db = FirebaseFirestore.getInstance()
+        val userRef = db.collection("users").document(email)
+
+        val userData = hashMapOf(
+            "email" to email,
+            "devices" to mutableListOf<String>() // List to store registered device IDs
+        )
+
+        userRef.set(userData)
+            .addOnSuccessListener {
+                Log.d("Firestore", "User data saved successfully")
+            }
+            .addOnFailureListener { e ->
+                Log.w("Firestore", "Error saving user data", e)
+            }
     }
 
     fun resetPassword(email: String, onSuccess: () -> Unit, onError: (String) -> Unit) {

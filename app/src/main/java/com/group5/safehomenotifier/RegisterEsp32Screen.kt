@@ -101,14 +101,9 @@ fun RegisterEsp32Screen(
                     if (tokenError.isEmpty()) {
                         val userEmail = FirebaseAuth.getInstance().currentUser?.email
                         if (userEmail != null) {
-                            val device = Device(
-                                deviceId = deviceId,
-                                token = token,
-                                deviceName = deviceName
-                            )
-                            deviceManager.verifyDeviceCredentials(device.deviceId, device.token) { isValid ->
+                           deviceManager.verifyDeviceCredentials(deviceId, token) { isValid ->
                                 if (isValid) {
-                                    deviceManager.registerDevice(userEmail, device) { success ->
+                                    deviceManager.registerDevice(userEmail, token, deviceId, deviceName) { success ->
                                         registrationStatus = if (success) "Device registered successfully." else "Failed to register device."
                                     }
                                 } else {
