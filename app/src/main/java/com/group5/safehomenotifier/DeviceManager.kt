@@ -96,16 +96,17 @@ class DeviceManager(private val db: FirebaseFirestore, private val functions: Fi
     }
 
 
-    fun updateDeviceToken(deviceId: String, newToken: String, onResult: (Boolean) -> Unit) {
+    fun updateDeviceToken(deviceId: String, enteredToken: String, newToken: String, onResult: (Boolean) -> Unit) {
         val deviceRef = db.collection("devices").document(deviceId)
 
         deviceRef.get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
                     val currentData = document.data ?: hashMapOf<String, Any>()
-                  //  val storedToken = currentData["token"] as? String
+                    val storedToken = currentData["token"] as? String
 
-                   // if (storedToken != null && storedToken == enteredToken) {
+                    if (storedToken != null && storedToken == enteredToken) {
+                        // Update token only if entered token matches the stored token
                         val updatedData = currentData.toMutableMap().apply {
                             this["token"] = newToken
                         }
@@ -119,17 +120,22 @@ class DeviceManager(private val db: FirebaseFirestore, private val functions: Fi
                                 Log.w("Firestore", "Error updating token", e)
                                 onResult(false)
                             }
-                    }
-                    else {
+                    } else {
                         // The entered token does not match the stored token
                         Log.w("Firestore", "Incorrect current token for device: $deviceId")
                         onResult(false)
                     }
+                } else {
+                    // Document does not exist
+                    Log.w("Firestore", "Device ID not found: $deviceId")
+                    onResult(false)
                 }
+            }
             .addOnFailureListener { e ->
                 Log.w("Firestore", "Error fetching device data", e)
                 onResult(false)
             }
     }
+
 
 }

@@ -117,7 +117,7 @@ fun UpdateDeviceTokenScreen(onBack: () -> Unit, deviceManager: DeviceManager) {
                 onClick = {
                     if (tokenError.isEmpty()) {
                         // Call the updateDeviceToken function with entered token and new token
-                        deviceManager.updateDeviceToken(deviceId, newToken) { success ->
+                        deviceManager.updateDeviceToken(deviceId, token, newToken) { success ->
                             updateStatus =
                                 if (success) "Token updated successfully." else "Invalid device ID or token."
                         }
