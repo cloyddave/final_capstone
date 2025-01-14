@@ -2,68 +2,93 @@ package com.group5.safehomenotifier
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.ContentValues
-import android.content.pm.PackageManager
-import android.os.Build
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import com.google.firebase.firestore.FirebaseFirestore
-import android.util.Log
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import coil.compose.rememberAsyncImagePainter
-import androidx.compose.runtime.mutableStateListOf
-import com.google.firebase.functions.FirebaseFunctions
-import androidx.compose.ui.graphics.Color
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.AbsoluteAlignment
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Color.Companion.White
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
+import com.group5.safehomenotifier.ui.theme.CharcoalBlue
+import com.group5.safehomenotifier.ui.theme.poppinsFontFamily
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStream
 import java.net.URL
-import androidx.compose.ui.text.font.FontWeight
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import com.group5.safehomenotifier.ui.theme.CharcoalBlue
-import com.group5.safehomenotifier.ui.theme.poppinsFontFamily
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
 
 class MainActivity : ComponentActivity() {
     private val functions = FirebaseFunctions.getInstance()
@@ -236,8 +261,9 @@ class MainActivity : ComponentActivity() {
                     showHistory -> {
                         HistoryScreen(
                             historyImages = historyImages,
-                            deviceName = deviceName,
-                            onBack = { showHistory = false }
+                            onBack = { showHistory = false },
+                            context = LocalContext.current
+
                         )
                     }
 
@@ -554,100 +580,114 @@ class MainActivity : ComponentActivity() {
     }
 
 
+        @Composable
+        fun HistoryScreen(
+            historyImages: List<String>, onBack: () -> Unit, context: Context,
+                         ) {
 
-    fun saveUserToFirestore(email: String) {
-        val db = FirebaseFirestore.getInstance()
-        val userRef = db.collection("users").document(email)
+            val database = HistoryDatabase.getDatabase(context)
+            val historyDao = remember { database.historyImageDao() }
+            var imageList by remember { mutableStateOf(listOf<HistoryImage>()) }
+            //val context = LocalContext.current
 
-        val userData = hashMapOf(
-            "email" to email,
-            "devices" to mutableListOf<String>() // List to store registered device IDs
-        )
-
-        userRef.set(userData)
-            .addOnSuccessListener {
-                Log.d("Firestore", "User data saved successfully")
+            LaunchedEffect(Unit) {
+                imageList = withContext(Dispatchers.IO) {
+                    historyDao.getAllImages()
+                }
             }
-            .addOnFailureListener { e ->
-                Log.w("Firestore", "Error saving user data", e)
-            }
-    }
 
-    @Composable
-    fun HistoryScreen(historyImages: List<String>, deviceName: String?, onBack: () -> Unit) {
 
-        var imageList by remember { mutableStateOf(listOf<String>()) }
-        val context = LocalContext.current
-
-        // Load images on screen entry
-        LaunchedEffect(Unit) {
-            imageList = getImagesFromPrefs(context)
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(CharcoalBlue)
-                .padding(16.dp), // Add padding to the Box if desired
-            contentAlignment = Alignment.Center // Center the contents
-        ) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    IconButton(onClick = { onBack() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = White // Customize color if needed
-                        )
-                    }
-                    Text(
-                        "History of Images:",
-                        fontFamily = poppinsFontFamily,
-                        fontWeight = FontWeight.Normal,
-                        color = White
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    if (deviceName != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(CharcoalBlue)
+                    .padding(16.dp), // Add padding to the Box if desired
+                contentAlignment = Alignment.Center // Center the contents
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        IconButton(onClick = { onBack() }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = White // Customize color if needed
+                            )
+                        }
                         Text(
-                            text = deviceName,
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(16.dp)
+                            "History of Images:",
+                            fontFamily = poppinsFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            color = White
                         )
-                    }
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    LazyColumn {
-                        items(historyImages) { imageUrl ->
-                            val painter = rememberAsyncImagePainter(imageUrl)
-                            val currentDateTime = remember {
-                                SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                            }
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Image(
-                                    painter = painter,
-                                    contentDescription = "Historical image",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(300.dp),
-                                    contentScale = ContentScale.Crop
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn {
+                            items(imageList) { image ->
+                                val painter = rememberAsyncImagePainter(image.imageUrl)
+                                val currentDateTime = remember {
+                                    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                                }
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Image(
+                                        painter = painter,
+                                        contentDescription = "Historical image",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(300.dp),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Viewed at: $currentDateTime",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray,
+                                        modifier = Modifier.padding(start = 8.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
 
-                                Text(
-                                    text = "Viewed at: $currentDateTime",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.Gray,
-                                    modifier = Modifier.padding(start = 8.dp)
-                                )
+                                    // Delete button
+                                    Button(
+                                        onClick = {
+                                            // Perform the delete operation
+                                            deleteImageAndUpdateList(image, historyDao, context)
+                                        },
+                                        modifier = Modifier.align(Alignment.End),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                                    ) {
+                                        Text(
+                                            text = "Delete",
+                                            color = White
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
+                }
+            }
+        }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+    private fun deleteImageAndUpdateList(
+        image: HistoryImage,
+        historyDao: HistoryImageDao,
+        context: Context
+    ) {
+        // Perform the delete operation in a background thread
+        CoroutineScope(Dispatchers.IO).launch {
+            historyDao.deleteImage(image)
+
+            // Once deleted, update the image list on the main thread
+            withContext(Dispatchers.Main) {
+                val updatedList = historyDao.getAllImages()
+                // Update the UI state in a Composable way
+                (context as? Activity)?.runOnUiThread {
+                    // Assuming you have a mechanism in your Composable to update state
+                    // Call the method to update the state here if needed
                 }
             }
         }
     }
+
 
 
     //Verify or check credential to Firebase firestore
@@ -734,6 +774,12 @@ class MainActivity : ComponentActivity() {
                     }) {
                         Text("Download", fontFamily = poppinsFontFamily)
                     }
+                    Button(onClick = {
+                        saveImageToHistory(context, imageUrl)
+                    }) {
+                        Text("Save to History")
+                    }
+
                 } else {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -793,25 +839,5 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    companion object {
-        fun saveImageToPrefs(context: Context, imageUrl: String) {
-            val prefs = context.getSharedPreferences("ImagePrefs", MODE_PRIVATE)
-            val editor = prefs.edit()
-
-            // Get existing images and append new one
-            val existingImages = prefs.getString("imageHistory", "") ?: ""
-            val newImages = if (existingImages.isNotEmpty()) {
-                "$existingImages,$imageUrl"
-            } else {
-                imageUrl
-            }
-
-            // Save to SharedPreferences
-            editor.putString("imageHistory", newImages)
-            editor.apply()
-        }
-
     }
 }

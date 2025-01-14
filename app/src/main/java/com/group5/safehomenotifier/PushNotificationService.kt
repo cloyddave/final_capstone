@@ -3,7 +3,7 @@ package com.group5.safehomenotifier
 import android.content.Intent
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.group5.safehomenotifier.MainActivity.Companion.saveImageToPrefs
+//import com.group5.safehomenotifier.MainActivity.Companion.saveImageToPrefs
 
 class PushNotificationService: FirebaseMessagingService() {
 
@@ -16,10 +16,6 @@ class PushNotificationService: FirebaseMessagingService() {
         super.onMessageReceived(remoteMessage)
         val imageUrl = remoteMessage.data["imageUrl"]
         val deviceName = remoteMessage.data["deviceName"]
-
-        if (imageUrl != null) {
-            saveImageToPrefs(this, imageUrl)  // Save image to SharedPreferences
-        }
 
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
