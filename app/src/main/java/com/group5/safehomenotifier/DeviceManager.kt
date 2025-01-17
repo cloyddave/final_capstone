@@ -137,5 +137,31 @@ class DeviceManager(private val db: FirebaseFirestore, private val functions: Fi
             }
     }
 
+    fun forgotToken(email: String, deviceId: String, onResult: (String?, Boolean) -> Unit) {
+        val userRef = db.collection("users").document(email)
+
+        userRef.collection("devices").document(deviceId).get()
+            .addOnSuccessListener { document ->
+                if (document.exists()) {
+                    val token = document.getString("token")
+                    if (!token.isNullOrEmpty()) {
+                        Log.d("Firestore", "Token retrieved for device: $deviceId")
+                        onResult(token, true)
+                    } else {
+                        Log.w("Firestore", "No token found for device: $deviceId")
+                        onResult(null, false)
+                    }
+                } else {
+                    Log.w("Firestore", "Device ID not found under email: $email")
+                    onResult(null, false)
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.w("Firestore", "Error fetching token for device: $deviceId", e)
+                onResult(null, false)
+            }
+    }
+
+
 
 }

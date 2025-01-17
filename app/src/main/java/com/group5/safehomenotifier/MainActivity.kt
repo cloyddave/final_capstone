@@ -34,6 +34,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.MaterialTheme.typography
+import androidx.compose.material.Typography
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -79,6 +81,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import com.group5.safehomenotifier.ui.theme.CharcoalBlue
+import com.group5.safehomenotifier.ui.theme.Typography
 import com.group5.safehomenotifier.ui.theme.poppinsFontFamily
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -120,9 +123,11 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
 
         setContent {
-            AppNavigation(
-                imageUrl = imageUrl
-            )
+            MaterialTheme {
+                AppNavigation(
+                    imageUrl = imageUrl
+                )
+            }
         }
 
 
@@ -225,6 +230,7 @@ class MainActivity : ComponentActivity() {
         var imageDisplay by remember { mutableStateOf(false) }
         var renameDevice by remember { mutableStateOf(false) }
         var changeToken by remember { mutableStateOf(false) }
+        var forgotToken by remember { mutableStateOf(false) }
         var expanded by remember { mutableStateOf(false) }
         val deviceName = intent.getStringExtra("deviceName")
         var showMyDevices by remember { mutableStateOf(false) }
@@ -261,6 +267,7 @@ class MainActivity : ComponentActivity() {
                     showHistory -> {
                         HistoryScreen(
                             historyImages = historyImages,
+                            deviceName = deviceName,
                             onBack = { showHistory = false },
                             context = LocalContext.current
 
@@ -288,6 +295,13 @@ class MainActivity : ComponentActivity() {
                     changeToken -> {
                         UpdateDeviceTokenScreen(
                             onBack = { changeToken = false },
+                            deviceManager = deviceManager
+                        )
+                    }
+
+                    forgotToken -> {
+                        ForgotTokenScreen(
+                            onBack = { forgotToken = false },
                             deviceManager = deviceManager
                         )
                     }
@@ -416,6 +430,13 @@ class MainActivity : ComponentActivity() {
                                 DropdownMenuItem(
                                     onClick = {
                                         expanded = false
+                                        forgotToken = true
+                                    },
+                                    text = { Text("Forgot Token", fontFamily = poppinsFontFamily) }
+                                )
+                                DropdownMenuItem(
+                                    onClick = {
+                                        expanded = false
                                         showMyDevices = true
                                     },
                                     text = {
@@ -439,54 +460,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         )
-    }
-
-
-    private fun setStarted() {
-        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
-        with(sharedPreferences.edit()) {
-            putBoolean("hasStarted", true)
-            apply()
-        }
-    }
-
-
-    private fun setRegistrationStatus(isRegistered: Boolean) {
-        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
-        with(sharedPreferences.edit()) {
-            putBoolean("isRegistered", isRegistered)
-            apply()
-        }
-    }
-
-    private fun isDeviceRegistered(): Boolean {
-        val sharedPreferences = getSharedPreferences("SafeHomePrefs", MODE_PRIVATE)
-        return sharedPreferences.getBoolean("isRegistered", false)
-    }
-
-    fun getImagesFromPrefs(context: Context): List<String> {
-        val prefs = context.getSharedPreferences("ImagePrefs", MODE_PRIVATE)
-        val savedImages = prefs.getString("imageHistory", "") ?: ""
-
-        // Return as list (filter out empty strings)
-        return if (savedImages.isNotEmpty()) savedImages.split(",") else emptyList()
-    }
-
-    fun saveImageToPrefs(context: Context, imageUrl: String) {
-        val prefs = context.getSharedPreferences("ImagePrefs", MODE_PRIVATE)
-        val editor = prefs.edit()
-
-        // Get existing images and append new one
-        val existingImages = prefs.getString("imageHistory", "") ?: ""
-        val newImages = if (existingImages.isNotEmpty()) {
-            "$existingImages,$imageUrl"
-        } else {
-            imageUrl
-        }
-
-        // Save to SharedPreferences
-        editor.putString("imageHistory", newImages)
-        editor.apply()
     }
 
 
@@ -582,7 +555,7 @@ class MainActivity : ComponentActivity() {
 
         @Composable
         fun HistoryScreen(
-            historyImages: List<String>, onBack: () -> Unit, context: Context,
+            historyImages: List<String>, deviceName: String?, onBack: () -> Unit, context: Context,
                          ) {
 
             val database = HistoryDatabase.getDatabase(context)
@@ -624,9 +597,17 @@ class MainActivity : ComponentActivity() {
                         LazyColumn {
                             items(imageList) { image ->
                                 val painter = rememberAsyncImagePainter(image.imageUrl)
-                                val currentDateTime = remember {
-                                    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                                val readableDate = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                                    .format(Date(image.timestamp))
+                                if (deviceName != null) {
+                                    Text(
+                                        text = deviceName,
+                                        color = White,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
                                 }
+
                                 Column(modifier = Modifier.padding(8.dp)) {
                                     Image(
                                         painter = painter,
@@ -638,7 +619,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        text = "Viewed at: $currentDateTime",
+                                        text = "Received at: $readableDate",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color.Gray,
                                         modifier = Modifier.padding(start = 8.dp)
@@ -740,6 +721,7 @@ class MainActivity : ComponentActivity() {
                 if (deviceName != null) {
                     Text(
                         text = deviceName,
+                        color = White,
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.padding(16.dp)
                     )
@@ -787,7 +769,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                text = "Image not available",
+                                text = "No smoke or flame detected.",
                                 fontFamily = poppinsFontFamily,
                                 color = White
                             )

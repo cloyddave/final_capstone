@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color.Companion.Black
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -88,13 +90,27 @@ fun SignInScreen(
 
         // Display the "Sign In" button when idle or after success/error is handled
         Button(onClick = {
-            authViewModel.signIn(
-                onSuccess = { onSignInSuccess() },
-                onError = { /* Error handled by UiState */ }
-            )
-        }) {
-            Text("Sign In")
+            if (authViewModel.email.isBlank() || authViewModel.password.isBlank()) {
+                // Show a Toast message if fields are empty
+                if (authViewModel.email.isBlank()) {
+                    Toast.makeText(context, "Email can't be left blank", Toast.LENGTH_SHORT).show()
+                }
+                if (authViewModel.password.isBlank()) {
+                    Toast.makeText(context, "Password can't be left blank", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                // Proceed with sign-in logic if fields are not empty
+                authViewModel.signIn(
+                    onSuccess = { onSignInSuccess() },
+                    onError = { /* Error handled by UiState */ }
+                )
+            }
+        },
+            colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
+        ) {
+            Text("Sign In", color = Black)
         }
+
 
         Spacer(modifier = Modifier.height(16.dp))
 

@@ -9,5 +9,5 @@ data class HistoryImage(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     @ColumnInfo(name = "image_url") val imageUrl: String,
     @ColumnInfo(name = "timestamp") val timestamp: Long = System.currentTimeMillis(),
-    //@ColumnInfo(name = "device_name") val deviceName: String?
+    // @ColumnInfo(name = "device_name") val deviceName: String?
 )

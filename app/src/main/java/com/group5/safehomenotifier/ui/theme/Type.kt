@@ -9,9 +9,12 @@ import androidx.compose.ui.unit.sp
 import com.group5.safehomenotifier.R
 
 // Set of Material typography styles to start with
+val poppinsFontFamily = FontFamily(
+    Font(R.font.poppinsregular, FontWeight.Black)
+)
 val Typography = Typography(
     bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = poppinsFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
@@ -33,9 +36,5 @@ val Typography = Typography(
         letterSpacing = 0.5.sp
     )
     */
-)
-
-val poppinsFontFamily = FontFamily(
-    Font(R.font.poppinsregular, FontWeight.Black)
 )
 

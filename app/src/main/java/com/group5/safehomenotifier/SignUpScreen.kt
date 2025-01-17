@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,6 +20,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color.Companion.Black
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -78,8 +81,9 @@ fun SignUpScreen(
                     Toast.makeText(
                         context,
                         "Sign-up successful. Please check your email to verify your account.",
-                        Toast.LENGTH_SHORT
+                        Toast.LENGTH_LONG
                     ).show()
+                    kotlinx.coroutines.delay(2000)
                     onNavigateToSignIn() // Navigate to the next screen upon success
                 }
             }
@@ -101,12 +105,25 @@ fun SignUpScreen(
 
         // Display the "Sign Up" button when idle or after success/error is handled
         Button(onClick = {
-            authViewModel.signUp(
-                onSuccess = { onNavigateToSignIn() },  // Navigate to sign-in on successful signup
-                onError = { /* Handle error */ }
-            )
-        }) {
-            Text("Sign Up")
+            if (authViewModel.email.isBlank() || authViewModel.password.isBlank()) {
+                // Show a Toast message if fields are empty
+                if (authViewModel.email.isBlank()) {
+                    Toast.makeText(context, "Email can't be left blank", Toast.LENGTH_SHORT).show()
+                }
+                if (authViewModel.password.isBlank()) {
+                    Toast.makeText(context, "Password can't be left blank", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                // Proceed with sign-in logic if fields are not empty
+                authViewModel.signUp(
+                    onSuccess = { onNavigateToSignIn() },
+                    onError = { /* Error handled by UiState */ }
+                )
+            }
+        },
+            colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
+            ) {
+            Text("Sign Up", color = Black)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
