@@ -34,8 +34,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.MaterialTheme.typography
-import androidx.compose.material.Typography
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -80,8 +78,8 @@ import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
+import com.group5.safehomenotifier.DeviceRepository.fetchUserDevices
 import com.group5.safehomenotifier.ui.theme.CharcoalBlue
-import com.group5.safehomenotifier.ui.theme.Typography
 import com.group5.safehomenotifier.ui.theme.poppinsFontFamily
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -275,9 +273,9 @@ class MainActivity : ComponentActivity() {
                     }
 
                     showMyDevices -> {
-                        MyDevicesScreen(
+                        MyDeviceScreen(
                             onBack = { showMyDevices = false },
-                            devices = userDevices
+                            email = FirebaseAuth.getInstance().currentUser?.email ?: ""
                         )
                     }
 
@@ -482,78 +480,6 @@ class MainActivity : ComponentActivity() {
 
 
     @Composable
-    fun MyDevicesScreen(onBack: () -> Unit, devices: List<Map<String, String>>) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF364559))
-                .padding(16.dp)
-        ) {
-            Column {
-                IconButton(onClick = { onBack() }) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = White
-                    )
-                }
-
-                Text(
-                    text = "My Devices",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontFamily = poppinsFontFamily,
-                    fontWeight = FontWeight.Normal,
-                    color = Color.LightGray
-                )
-
-                LazyColumn {
-                    items(devices) { device ->
-                        DeviceCard(
-                            deviceId = device["device_id"] ?: "",
-                            deviceName = device["deviceName"] ?: "Unnamed Device"
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    @Composable
-    fun DeviceCard(deviceId: String, deviceName: String) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp)
-                .clickable { /* Handle device click */ },
-            //backgroundColor = White
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Device ID: $deviceId", fontFamily = poppinsFontFamily)
-                Text("Device Name: $deviceName", fontFamily = poppinsFontFamily)
-            }
-        }
-    }
-
-    private fun fetchUserDevices(
-        email: String,
-        onResult: (List<Map<String, String>>) -> Unit
-    ) {
-        db.collection("users").document(email).collection("devices")
-            .get()
-            .addOnSuccessListener { result ->
-                val devices = result.map { document ->
-                    document.data.mapValues { it.value.toString() }
-                }
-                onResult(devices)
-            }
-            .addOnFailureListener { e ->
-                Log.w("Firestore", "Error fetching devices", e)
-                onResult(emptyList())
-            }
-    }
-
-
-        @Composable
         fun HistoryScreen(
             historyImages: List<String>, deviceName: String?, onBack: () -> Unit, context: Context,
                          ) {
@@ -599,14 +525,6 @@ class MainActivity : ComponentActivity() {
                                 val painter = rememberAsyncImagePainter(image.imageUrl)
                                 val readableDate = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
                                     .format(Date(image.timestamp))
-                                if (deviceName != null) {
-                                    Text(
-                                        text = deviceName,
-                                        color = White,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        modifier = Modifier.padding(16.dp)
-                                    )
-                                }
 
                                 Column(modifier = Modifier.padding(8.dp)) {
                                     Image(
@@ -631,6 +549,9 @@ class MainActivity : ComponentActivity() {
                                         onClick = {
                                             // Perform the delete operation
                                             deleteImageAndUpdateList(image, historyDao, context)
+                                            { updatedList ->
+                                                imageList = updatedList
+                                            }
                                         },
                                         modifier = Modifier.align(Alignment.End),
                                         colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
@@ -651,20 +572,19 @@ class MainActivity : ComponentActivity() {
     private fun deleteImageAndUpdateList(
         image: HistoryImage,
         historyDao: HistoryImageDao,
-        context: Context
+        context: Context,
+        updateImageList: (List<HistoryImage>) -> Unit
     ) {
         // Perform the delete operation in a background thread
         CoroutineScope(Dispatchers.IO).launch {
             historyDao.deleteImage(image)
 
             // Once deleted, update the image list on the main thread
+            val updatedList = historyDao.getAllImages()
             withContext(Dispatchers.Main) {
-                val updatedList = historyDao.getAllImages()
                 // Update the UI state in a Composable way
-                (context as? Activity)?.runOnUiThread {
-                    // Assuming you have a mechanism in your Composable to update state
-                    // Call the method to update the state here if needed
-                }
+                updateImageList(updatedList)
+                Toast.makeText(context, "Image deleted", Toast.LENGTH_SHORT).show()
             }
         }
     }
