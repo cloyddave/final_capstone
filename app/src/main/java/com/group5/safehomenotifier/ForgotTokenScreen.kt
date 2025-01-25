@@ -41,6 +41,7 @@ fun ForgotTokenScreen(onBack: () -> Unit, deviceManager: DeviceManager) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
 
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -109,7 +110,7 @@ fun ForgotTokenScreen(onBack: () -> Unit, deviceManager: DeviceManager) {
             Spacer(modifier = Modifier.height(16.dp))
 
             if (token != null) {
-                Text("Token: $token", style = MaterialTheme.typography.bodyLarge)
+                Text("Token: $token", style = MaterialTheme.typography.bodyLarge, color = White)
             }
 
             if (errorMessage != null) {

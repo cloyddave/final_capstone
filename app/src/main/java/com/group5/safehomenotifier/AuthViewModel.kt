@@ -82,7 +82,7 @@ class AuthViewModel : ViewModel() {
 
         val userData = hashMapOf(
             "email" to email,
-            "devices" to mutableListOf<String>() // List to store registered device IDs
+            "devices" to mutableListOf<String>(),// List to store registered device IDs
         )
 
         userRef.set(userData)

@@ -1,6 +1,8 @@
 package com.group5.safehomenotifier
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,9 +61,9 @@ fun SafeHomeNotifierApp(
     deviceManager: DeviceManager,
 ) {
     val context = LocalContext.current
+    val currentRole = remember { mutableStateOf(getUserRole(context)) }
     val deviceName = (context as? android.app.Activity)?.intent?.getStringExtra("deviceName")
     var isRegistering by rememberSaveable { mutableStateOf(false) }
-    //val isRegisteredSuccessfully by rememberSaveable { mutableStateOf(isDeviceRegistered()) }
     var showHistory by remember { mutableStateOf(false) }
     var imageDisplay by remember { mutableStateOf(false) }
     var renameDevice by remember { mutableStateOf(false) }
@@ -70,7 +72,6 @@ fun SafeHomeNotifierApp(
     var expanded by remember { mutableStateOf(false) }
    // val deviceName = intent.getStringExtra("deviceName")
     var showMyDevices by remember { mutableStateOf(false) }
-
     val userDevices = remember { mutableStateListOf<Map<String, String>>() }
 
     LaunchedEffect(Unit) {
@@ -87,6 +88,7 @@ fun SafeHomeNotifierApp(
     Scaffold(
         content = {
             when {
+
                 isRegistering -> {
                     RegisterEsp32Screen(
                         onBack = { isRegistering = false },
@@ -99,7 +101,7 @@ fun SafeHomeNotifierApp(
                         onBack = { renameDevice = false },
                         deviceManager = deviceManager
                     )
-                }
+                    }
 
                 showHistory -> {
                     HistoryScreen(
@@ -245,17 +247,30 @@ fun SafeHomeNotifierApp(
                                 },
                                 text = { Text("History", fontFamily = poppinsFontFamily) }
                             )
+
                             DropdownMenuItem(
                                 onClick = {
+                                if (currentRole.value == UserRole.OWNER) {
                                     expanded = false
                                     renameDevice = true
+                                }else {
+                                        Toast.makeText(context, "Feature available only for Owners",
+                                            Toast.LENGTH_SHORT).show()
+                                    }
                                 },
                                 text = { Text("Rename Device", fontFamily = poppinsFontFamily) }
                             )
+
+
                             DropdownMenuItem(
                                 onClick = {
-                                    expanded = false
-                                    changeToken = true
+                                    if (currentRole.value == UserRole.OWNER) {
+                                        expanded = false
+                                        changeToken = true
+                                    } else {
+                                            Toast.makeText(context, "Feature available only for Owners",
+                                                Toast.LENGTH_SHORT).show()
+                                        }
                                 },
                                 text = {
                                     Text(
@@ -264,10 +279,17 @@ fun SafeHomeNotifierApp(
                                     )
                                 }
                             )
+
+
                             DropdownMenuItem(
                                 onClick = {
+                                    if (currentRole.value == UserRole.OWNER) {
                                     expanded = false
                                     forgotToken = true
+                                    } else {
+                                        Toast.makeText(context, "Feature available only for Owners",
+                                            Toast.LENGTH_SHORT).show()
+                                    }
                                 },
                                 text = { Text("Forgot Token", fontFamily = poppinsFontFamily) }
                             )
@@ -297,4 +319,10 @@ fun SafeHomeNotifierApp(
             }
         }
     )
+}
+
+fun getUserRole(context: Context): UserRole {
+    val sharedPreferences = context.getSharedPreferences("AppPreferences", Context.MODE_PRIVATE)
+    val roleName = sharedPreferences.getString("USER_ROLE", UserRole.VIEWER.name) ?: UserRole.VIEWER.name
+    return UserRole.valueOf(roleName)
 }
