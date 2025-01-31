@@ -1,5 +1,6 @@
 package com.group5.safehomenotifier
 
+import android.app.AlertDialog
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -50,7 +51,7 @@ import java.util.Locale
 fun HistoryScreen(
     historyImages: List<String>, deviceName: String?, onBack: () -> Unit, context: Context,
 ) {
-
+    val currentRole = remember { mutableStateOf(getUserRole(context)) }
     val database = HistoryDatabase.getDatabase(context)
     val historyDao = remember { database.historyImageDao() }
     var imageList by remember { mutableStateOf(listOf<HistoryImage>()) }
@@ -114,10 +115,13 @@ fun HistoryScreen(
                             // Delete button
                             Button(
                                 onClick = {
-                                    // Perform the delete operation
-                                    deleteImageAndUpdateList(image, historyDao, context)
-                                    { updatedList ->
-                                        imageList = updatedList
+                                    if (currentRole.value == UserRole.OWNER) {
+                                        // Perform the delete operation
+                                        deleteImageAndUpdateList(image, historyDao, context) { updatedList ->
+                                            imageList = updatedList
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "Feature available only for Owners", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 modifier = Modifier.align(Alignment.End),
@@ -128,6 +132,7 @@ fun HistoryScreen(
                                     color = White
                                 )
                             }
+
                         }
                     }
                 }
@@ -142,17 +147,24 @@ private fun deleteImageAndUpdateList(
     context: Context,
     updateImageList: (List<HistoryImage>) -> Unit
 ) {
-    // Perform the delete operation in a background thread
-    CoroutineScope(Dispatchers.IO).launch {
-        historyDao.deleteImage(image)
+    // Show a confirmation dialog
+    AlertDialog.Builder(context)
+        .setTitle("Delete Image")
+        .setMessage("Are you sure you want to delete?")
+        .setPositiveButton("Yes") { _, _ ->
+            // Perform the delete operation in a background thread
+            CoroutineScope(Dispatchers.IO).launch {
+                historyDao.deleteImage(image)
 
-        // Once deleted, update the image list on the main thread
-        val updatedList = historyDao.getAllImages()
-        withContext(Dispatchers.Main) {
-            // Update the UI state in a Composable way
-            updateImageList(updatedList)
-            Toast.makeText(context, "Image deleted", Toast.LENGTH_SHORT).show()
+                // Once deleted, update the image list on the main thread
+                val updatedList = historyDao.getAllImages()
+                withContext(Dispatchers.Main) {
+                    updateImageList(updatedList)
+                    Toast.makeText(context, "Image deleted", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
-    }
+        .setNegativeButton("No", null) // Do nothing if "No" is clicked
+        .show()
 }
 
